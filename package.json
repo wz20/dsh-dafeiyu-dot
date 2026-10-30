@@ -31,6 +31,7 @@
     "locale/",
     "cordis.patch.yml",
     "README.md",
+    "screenshots.json",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "docs/setup.md",
