@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "stickers": [
+    {
+      "id": "warm",
+      "title": "贴贴～",
+      "emotion": "warm",
+      "tags": [
+        "贴贴",
+        "亲近",
+        "喜欢",
+        "爱心",
+        "warm"
+      ],
+      "file": "warm.png",
+      "mime": "image/png"
+    },
+    {
+      "id": "joyful",
+      "title": "嘿嘿！",
+      "emotion": "joyful",
+      "tags": [
+        "开心",
+        "高兴",
+        "嘿嘿",
+        "好耶",
+        "joyful"
+      ],
+      "file": "joyful.png",
+      "mime": "image/png"
+    },
+    {
+      "id": "soothing",
+      "title": "抱抱你",
+      "emotion": "soothing",
+      "tags": [
+        "抱抱",
+        "安慰",
+        "陪伴",
+        "辛苦",
+        "soothing"
+      ],
+      "file": "soothing.png",
+      "mime": "image/png"
+    },
+    {
+      "id": "playful",
+      "title": "本鱼超乖",
+      "emotion": "playful",
+      "tags": [
+        "撒娇",
+        "俏皮",
+        "乖巧",
+        "得意",
+        "playful"
+      ],
+      "file": "playful.png",
+      "mime": "image/png"
+    },
+    {
+      "id": "concerned",
+      "title": "本鱼在呢",
+      "emotion": "concerned",
+      "tags": [
+        "在呢",
+        "关心",
+        "倾听",
+        "陪着",
+        "concerned"
+      ],
+      "file": "concerned.png",
+      "mime": "image/png"
+    },
+    {
+      "id": "apologetic",
+      "title": "本鱼错啦",
+      "emotion": "apologetic",
+      "tags": [
+        "道歉",
+        "对不起",
+        "错啦",
+        "抱歉",
+        "apologetic"
+      ],
+      "file": "apologetic.png",
+      "mime": "image/png"
+    },
+    {
+      "id": "sad",
+      "title": "委屈巴巴",
+      "emotion": "sad",
+      "tags": [
+        "委屈",
+        "难过",
+        "伤心",
+        "眼泪",
+        "sad"
+      ],
+      "file": "sad.png",
+      "mime": "image/png"
+    },
+    {
+      "id": "sleepy",
+      "title": "晚安啦",
+      "emotion": "warm",
+      "tags": [
+        "晚安",
+        "睡觉",
+        "困了",
+        "月亮",
+        "sleepy"
+      ],
+      "file": "sleepy.png",
+      "mime": "image/png"
+    },
+    {
+      "id": "surprised",
+      "title": "欸？！",
+      "emotion": "playful",
+      "tags": [
+        "惊讶",
+        "意外",
+        "欸",
+        "震惊",
+        "surprised"
+      ],
+      "file": "surprised.png",
+      "mime": "image/png"
+    },
+    {
+      "id": "angry",
+      "title": "哼！",
+      "emotion": "playful",
+      "tags": [
+        "哼",
+        "生气",
+        "傲娇",
+        "气鼓鼓",
+        "angry"
+      ],
+      "file": "angry.png",
+      "mime": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "tool": "image_gen",
+  "mode": "built-in",
+  "style": "手绘白板",
+  "date": "2026-10-30",
+  "promptStage": "final-image-edit",
+  "inputRole": "工程手绘白板图，用于完善技术名称和流程标注",
+  "diagrams": [
+    {
+      "file": "architecture.png",
+      "title": "大肥鱼插件 · 系统架构",
+      "prompt": "在这张手绘系统架构图中明确实际技术名称。保持现有白底、黑色手绘方框、淡蓝淡黄配色和正确连线。底部网关框标题改为『NapCatQQ』，框内第二行『OneBot v11 · 正向 WebSocket』，保留QQ↔NapCatQQ↔大肥鱼插件直接双向线。右侧外部语音服务框扩大并写标题『本地语音服务』，内部三个清楚的竖向步骤『VoiceStudio』↓『audio.cpp』↓『Breeze TTS 2』；旁边单独小框『API TTS（可选）』。插件与本地语音服务双向连线标注『HTTP /v1/audio/speech』；API TTS作为可选的另一连线，不放在Breeze下面，不接到Breeze。麦克风接口框改成标题『语音识别接口』，框内两行小字『DSH speechToText』『SenseVoice』。DSH桌面标题下保留『管理与调用范围 · 模型服务可在本机或 API』。运行数据框内补充『Markdown / JSON / 本机素材』。增加右下角短注『技术示例 · 服务独立部署』。所有新增英文必须清晰且拼写准确，Breeze TTS 2、NapCatQQ、OneBot v11、VoiceStudio、audio.cpp、SenseVoice。可以略微缩小DSH边界，给右侧服务留出空间，整张图保持横向16:9，所有线端明确。"
+    },
+    {
+      "file": "memory-flow.png",
+      "title": "记忆如何延续",
+      "prompt": "在这张『记忆如何延续』白底手绘工程流程图上，明确实际存储与检索技术。保持所有现有正确流程与箭头：上半区本地索引检索框内，在标题下增加清楚小字『关键词 / 别名 / 结构化约束』，可适当放大框。最右下保存框标题改为分三行『Markdown 事实』『JSON 状态』『可重建索引』。持久待办框内小字增加『JSON 持久队列』。其余文字包括两条触发合流、模型提取、证据核验、写入结果向下分支到安全入队/写入失败，允许/暂停压缩，以及保存框返回检索的外侧回路，全部保持。注释和全图白底、淡蓝淡黄手绘风格保留。英文Markdown、JSON清楚，中文完整。可以微调间距保证阅读，不引入数据库、Embedding或其他技术。"
+    },
+    {
+      "file": "emotional-voice-flow.png",
+      "title": "同一音色，怎样表达情绪",
+      "prompt": "在这张手绘情绪语音流程图中，把本地合成路线的实际技术层次画清楚。保持左侧最终回复、并行台词清洗与语气判断、启用条件、API单独支路、右侧校验与调速的结构。上方『本地情绪 TTS』框扩大，内部从上到下写三行并用小箭头连接：『VoiceStudio（audiocpp）』↓『audio.cpp』↓『Breeze TTS 2』。框顶保留标题『本地情绪 TTS』，底部小标签『选定音色』。框外上方加入很短的请求标注『POST /v1/audio/speech』。可朗读台词和情绪指令仍分别明确进入本地框。把情绪指令箭头上的文字改为『instructions · 情绪指令』。API普通TTS仅收到可朗读台词。语音输出下的『QQ 语音』标签改为『NapCatQQ → QQ』，DSH播放标签保留。其余中文说明、启用情绪且本地audiocpp条件、WAV校验、FFmpeg调速都保留。必要时略微重新排版以扩大本地框，保证中文英文清楚，没有箭头穿过任何文字或框。纯白纸、黑色手绘工程线、淡蓝淡紫色块，横向16:9。"
+    }
+  ]
+}

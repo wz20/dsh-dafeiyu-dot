@@ -1,0 +1,85 @@
+{
+  "version": "0.10.0",
+  "checkedAt": "2026-10-30T04:22:46.029449+00:00",
+  "tests": {
+    "passed": 494,
+    "failed": 0,
+    "skipped": 0,
+    "syntax": "passed"
+  },
+  "memorySearch": {
+    "method": "local structured constraints, keywords and aliases",
+    "evaluation": "fixed synthetic regression set",
+    "facts": 14,
+    "queries": 22,
+    "exactResultSetsBefore": 6,
+    "exactResultSetsAfter": 22,
+    "aggregateReturnedPrecisionBefore": 0.3287671232876712,
+    "aggregateReturnedPrecisionAfter": 1.0,
+    "recallBefore": 1.0,
+    "recallAfter": 1.0,
+    "independentFulltextRegressions": "passed",
+    "limits": "This small synthetic set does not estimate general conversation accuracy."
+  },
+  "qqRecovery": {
+    "connectionTimeoutMs": 15000,
+    "onlineIdentityCheckIntervalMs": 30000,
+    "retryDelayMs": [
+      2000,
+      4000,
+      8000,
+      16000,
+      30000
+    ],
+    "manualReconnect": "saved gateway settings",
+    "unconfirmedDeliveriesAutomaticallyResent": false,
+    "deterministicFaultTests": 8,
+    "liveGatewayFaultInjection": "not performed"
+  },
+  "dataSeparation": {
+    "newInstallVoice": "user-selected",
+    "runtimeDataOutsideSource": true,
+    "customMediaOutsideSource": true,
+    "privateSourceHistoryOutsideSource": true,
+    "releaseCheckKnownPrivateValuesAndMediaHashes": "passed",
+    "riskCount": 0,
+    "review": "Synthetic credential fixture reviewed as test data."
+  },
+  "assets": {
+    "defaultGenericStickerCount": 10,
+    "generatedWidgetMediaCount": 16,
+    "upstreamCodeLicenseRetained": true,
+    "originalUpstreamAssetProvenanceRetained": true,
+    "currentMediaProvenance": "vendor/widget/ASSET_ADAPTATION.md"
+  },
+  "manualVerification": {
+    "nativeRestartAndSettings": "passed",
+    "speakerListening": "user acceptance",
+    "microphoneCall": "user acceptance"
+  },
+  "limits": [
+    "Memory retrieval uses deterministic keywords and finite aliases; unknown ordinary entity names are not resolved with general semantic inference.",
+    "Pre-compaction capture persists source jobs; fact extraction may finish later, and uncaptured sources before a crash are not guaranteed recoverable.",
+    "QQ account login expiry requires manual login in the local gateway.",
+    "Privacy checks depend on known values, media provenance and reviewed fixtures; maintainers should repeat them before publishing."
+  ],
+  "nativeCheckedAt": "2026-10-30T05:33:36.798453+00:00",
+  "nativeAcceptance": {
+    "restart": "passed",
+    "memoryInventoryAndOrganizer": "passed",
+    "freshConversationRecall": "passed",
+    "requestMemoryFragmentInspected": true,
+    "toolCallsForRecallQuestion": 0,
+    "temporaryQuestionNotQueued": true,
+    "memoryRecordsUnchangedDuringCheck": true,
+    "manualQQReconnectTransitions": [
+      "connecting",
+      "ready"
+    ],
+    "pairingAndSavedConfigurationPreserved": true,
+    "QQTestMessagesSent": 0,
+    "speakerPlayback": false,
+    "microphoneCapture": false,
+    "localCustomMediaPreserved": true
+  }
+}

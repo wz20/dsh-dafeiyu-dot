@@ -1,0 +1,76 @@
+{
+  "name": "dsh-dafeiyu-dot",
+  "version": "0.10.0",
+  "description": "大肥鱼 · 有情绪的声音、记忆宫殿与深海陪伴",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wz20/dsh-dafeiyu-dot.git"
+  },
+  "homepage": "https://github.com/wz20/dsh-dafeiyu-dot#readme",
+  "bugs": "https://github.com/wz20/dsh-dafeiyu-dot/issues",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./persona": "./lib/persona.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./assets/icon.png",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./group-persona": "./lib/group-persona.js"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/",
+    "assets/",
+    "vendor/",
+    "locale/",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/setup.md",
+    "docs/memory.md",
+    "docs/recovery.md",
+    "docs/release-privacy.md",
+    "docs/acceptance.md",
+    "docs/assets.md",
+    "docs/images/",
+    "scripts/generate-stickers.mjs",
+    "scripts/check-release-privacy.py",
+    "scripts/generate-widget-assets.py",
+    "docs/verification.json"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check index.js && node --check client.js && node --check assets/memory-graph.js && node --check assets/memory-graph-dynamics.js && node --check assets/memory-explorer.js",
+    "privacy": "python3 scripts/check-release-privacy.py . --fail-on-risk",
+    "prepack": "npm run privacy"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-credentials": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/schemastery": "^3.18.4"
+  }
+}
