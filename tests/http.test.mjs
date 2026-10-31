@@ -206,6 +206,30 @@ test('manual QQ recovery requires the existing trusted route and retains saved c
   const response=await host.call(req('/qq/reconnect','POST',{}));assert.equal(response.status,200);assert.equal(response.data().qq.phase,'connecting');assert.equal(attempts,1);assert.deepEqual(host.config(),saved);
 });
 
+test('NapCat login routes require DSH authorization and keep QR responses uncached',async()=>{
+ const calls=[],login={phase:'waiting_qrcode',loggedIn:false,qrImage:'data:image/svg+xml;base64,PHN2Zy8+'};
+ const host=fixture({snapshot:()=>({connected:false})},{},undefined,{napcatLogin:{state:async options=>{calls.push(options);return login;}}});
+ const blocked=await host.call(req('/qq/login','GET',undefined,{'sec-fetch-site':'cross-site'}));assert.equal(blocked.status,403);assert.equal(calls.length,0);
+ const read=await host.call(req('/qq/login'));assert.equal(read.status,200);assert.deepEqual(read.data().login,login);assert.equal(read.headers['Cache-Control'],'no-store');assert.equal(calls[0].refresh,undefined);
+ const refreshed=await host.call(req('/qq/login/refresh','POST',{}));assert.equal(refreshed.status,200);assert.equal(calls[1].refresh,true);
+ assert.equal(calls[1].signal.aborted,false);
+});
+
+test('NapCat setup stores only its secret in DSH and preserves unrelated saved QQ settings',async()=>{
+ const host=fixture(),before=structuredClone(host.config().qq);
+ const saved=await host.call(req('/qq/login/config','POST',{napcatUrl:'http://localhost:16099',napcatToken:'synthetic-napcat-key'}));
+ assert.equal(saved.status,200);assert.deepEqual(host.secrets,[{ref:'DAFEIYU_NAPCAT_WEBUI_TOKEN',key:'synthetic-napcat-key'}]);
+ assert.equal(saved.data().config.napcatTokenConfigured,true);assert.deepEqual(host.config().qq,{...before,napcatUrl:'http://localhost:16099'});
+ assert.doesNotMatch(saved.body.toString(),/synthetic-napcat-key|"napcatToken"/);assert.doesNotMatch(JSON.stringify(host.config()),/synthetic-napcat-key|"napcatToken"/);
+ const invalid=await host.call(req('/qq/login/config','POST',{napcatUrl:'https://remote.example',napcatToken:'other-secret'}));assert.equal(invalid.status,400);assert.equal(host.secrets.length,1);
+ const blocked=await host.call(req('/qq/login/config','POST',{napcatToken:'other-secret'},{'sec-fetch-site':'cross-site'}));assert.equal(blocked.status,403);assert.equal(host.secrets.length,1);
+});
+
+test('NapCat missing credentials return a setup code without returning secrets',async()=>{
+ const host=fixture(undefined,{},undefined,{napcatLogin:{state:async()=>{throw Object.assign(Error('请先保存 NapCat 管理密钥。'),{status:428,code:'NAPCAT_TOKEN_REQUIRED'});}}});
+ const result=await host.call(req('/qq/login'));assert.equal(result.status,428);assert.equal(result.data().code,'NAPCAT_TOKEN_REQUIRED');
+});
+
 test('personal media uses the authenticated asset route with private no-store caching',async t=>{
   const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
   const root=await mkdtemp(join(tmpdir(),'companion-http-assets-'));t.after(()=>rm(root,{recursive:true,force:true}));await writeFile(join(root,'role-preview.png'),'local-image-bytes');

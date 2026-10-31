@@ -9,6 +9,7 @@ import { createSpeech } from './lib/speech.js';
 import { registerRoutes } from './lib/routes.js';
 import { installWidget } from './lib/widget.js';
 import { installQQ } from './lib/qq.js';
+import { createNapcatLogin } from './lib/napcat-login.js';
 import { createSinging } from './lib/singing.js';
 import { installSinging } from './lib/singing-tools.js';
 import { createGroupConversations } from './lib/group-conversations.js';
@@ -28,6 +29,7 @@ export function apply(ctx,options={}) {
     const singing=createSinging(host,{root,getConfig:()=>config.get()});
     const stickers=createQQStickers({localAssetRoot:join(root,'assets','stickers')});
     const qq=installQQ(host,{config,speech,singing,stickers,groupConversations,root});
+    const napcatLogin=createNapcatLogin(host,config);
     installQQStickerTools(host,qq);
     reconcileTools=installMemory(host,memory,()=>config.get(),{resolveStore:agent=>groupConversations.resolveStore(agent,memory),additionalGroupTools:QQ_STICKER_TOOLS});
     const lifecycle=installMemoryLifecycle(host,memory,()=>config.get(),{acceptAgent:agent=>currentPreset(agent.session)==='whale'&&!groupConversations.isGroupSession(agent.id)});
@@ -39,7 +41,7 @@ export function apply(ctx,options={}) {
     const reconcile=async()=>{reconcileTools();recall.reconcile();await lifecycle.reconcile();await groupConversations.reconcile();};
     installSinging(host,singing,{sourceSignal:agent=>qq.signalForTurn(agent)});
     const reconcileAll=async()=>{await reconcile();await qq.reconcile();};
-    registerRoutes(host,{config,memory,speech,singing,reconcile:reconcileAll,lifecycle:{...lifecycle,snapshot:()=>({...lifecycle.snapshot(),recall:recall.snapshot()})},qq,cwd:options.cwd,localAssetRoot:join(root,'assets')});
+    registerRoutes(host,{config,memory,speech,singing,reconcile:reconcileAll,lifecycle:{...lifecycle,snapshot:()=>({...lifecycle.snapshot(),recall:recall.snapshot()})},qq,napcatLogin,cwd:options.cwd,localAssetRoot:join(root,'assets')});
     if(options.legacyMemoryRoot)host.effect(()=>{let active=true;memory.importLegacy(options.legacyMemoryRoot).catch(()=>{if(active)console.warn('dsh-dafeiyu-dot: existing memory import could not finish; source remains available.');});return ()=>{active=false;};});
   });
 }

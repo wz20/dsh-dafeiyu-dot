@@ -81,5 +81,27 @@
     "speakerPlayback": false,
     "microphoneCapture": false,
     "localCustomMediaPreserved": true
+  },
+  "latestUpdate": {
+    "version": "0.10.1",
+    "checkedAt": "2026-10-31T09:58:18.105482+00:00",
+    "tests": {
+      "passed": 557,
+      "failed": 0,
+      "skipped": 0,
+      "syntax": "passed"
+    },
+    "napcatLogin": {
+      "embeddedQrDialog": "implemented",
+      "refreshAndCloseCancellation": "automated tests passed",
+      "automaticReconnectAfterScan": "simulated flow passed",
+      "nativeHostRestart": "passed",
+      "authenticatedNativeLoginRouteStatus": 200,
+      "nativeQrGeneration": "passed",
+      "credentialValueReturnedToClient": false,
+      "realPhoneScanAndPostLoginRecovery": "user reported normal; native QQ channel subsequently confirmed ready and paired",
+      "managementCredentialStorage": "DSH credentials service"
+    },
+    "publication": "source and installable package"
   }
 }

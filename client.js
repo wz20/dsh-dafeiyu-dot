@@ -85,7 +85,7 @@ window.__ModuleLoader__.load({
         });
         if (options.audio && response.ok && !(response.headers.get('content-type') || '').includes('json')) { const blob = await response.blob(); options.onAudioResponse?.(response); return blob; }
         const data = await response.json().catch(() => ({ok: false, error: '服务返回了无法读取的内容。'}));
-        if (!response.ok || data.ok === false) throw new Error(data.error || '服务暂时不可用。');
+        if (!response.ok || data.ok === false) throw Object.assign(new Error(data.error || '服务暂时不可用。'),{status:response.status,code:data.code});
         return data;
       } finally { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); }
     }
@@ -300,6 +300,9 @@ window.__ModuleLoader__.load({
       const [voices, setVoices] = useState([]), [speechPreparing, setSpeechPreparing] = useState(false), [apiKey, setApiKey] = useState(''), [health, setHealth] = useState(null);
       const [qqToken, setQQToken] = useState(''), [qqStatus, setQQStatus] = useState(null);
       const [qqReconnecting,setQQReconnecting]=useState(false);
+      const [napcatOpen,setNapcatOpen]=useState(false),[napcatLogin,setNapcatLogin]=useState(null),[napcatError,setNapcatError]=useState(''),[napcatLoading,setNapcatLoading]=useState(false),[napcatAttempt,setNapcatAttempt]=useState(0);
+      const [napcatToken,setNapcatToken]=useState(''),[napcatDraftUrl,setNapcatDraftUrl]=useState('http://127.0.0.1:16099'),[napcatNeedsSetup,setNapcatNeedsSetup]=useState(false),[napcatSaving,setNapcatSaving]=useState(false);
+      const napcatDialog=useRef(null),napcatRefresh=useRef(false),napcatSaveGate=useRef(false),qqReconnectGate=useRef(false);
       const [qqView, setQQView] = useState('monitor');
       const [qqGroups, setQQGroups] = useState([]), [qqGroupsLoading, setQQGroupsLoading] = useState(false);
       const [widgetPreviewRegion, setWidgetPreviewRegion] = useState('head');
@@ -476,18 +479,18 @@ window.__ModuleLoader__.load({
       }
       useEffect(() => {
         if (!nav.view) return;
-        const previous = document.activeElement, timer = setTimeout(() => root.current?.querySelector('button, input, textarea, select')?.focus(), 30);
+        const previous = document.activeElement, timer = setTimeout(() => (napcatOpen?napcatDialog.current:root.current)?.querySelector('button, input, textarea, select')?.focus(), 30);
         function onKey(event) {
           if (placement === 'panel' && !root.current?.contains(event.target)) return;
-          if (event.key === 'Escape') { event.preventDefault(); if (history) setHistory(false); else if (flags.current.readExpanded) setReadExpanded(false); else close(); }
-          if (event.key !== 'Tab' || placement === 'panel') return;
-          const items = [...(root.current?.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]') || [])].filter(x => x.getClientRects().length);
+          if (event.key === 'Escape') { event.preventDefault(); if(napcatOpen){setNapcatOpen(false);setNapcatToken('');}else if (history) setHistory(false); else if (flags.current.readExpanded) setReadExpanded(false); else close(); }
+          if (event.key !== 'Tab' || placement === 'panel'&&!napcatOpen) return;
+          const items = [...((napcatOpen?napcatDialog.current:root.current)?.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]') || [])].filter(x => x.getClientRects().length);
           if (!items.length) return;
           if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items[items.length - 1].focus(); }
           if (!event.shiftKey && document.activeElement === items[items.length - 1]) { event.preventDefault(); items[0].focus(); }
         }
         window.addEventListener('keydown', onKey); return () => { clearTimeout(timer); window.removeEventListener('keydown', onKey); if (previous?.isConnected) previous.focus(); };
-      }, [!!nav.view, history, close, placement]);
+      }, [!!nav.view, history, close, placement,napcatOpen]);
       async function speak(content, preview = false, native = null, options = {}) {
         setNotice(current => current === SPEECH_FALLBACK_NOTICE ? '' : current);
         setSpeechDelivery(null);
@@ -620,8 +623,61 @@ window.__ModuleLoader__.load({
         setQQStatus(result.qq);
         if(result.config){
           setSnapshot(s=>s?{...s,qq:result.qq,config:{...s.config,qq:result.config}}:s);
-          setDraft(d=>d?{...d,qq:{...d.qq,botId:result.config.botId,ownerId:result.config.ownerId,tokenConfigured:result.config.tokenConfigured}}:d);
+          setDraft(d=>d?{...d,qq:{...d.qq,botId:result.config.botId,ownerId:result.config.ownerId,tokenConfigured:result.config.tokenConfigured,napcatTokenConfigured:result.config.napcatTokenConfigured,napcatUrl:result.config.napcatUrl}}:d);
         }
+      }
+      function openNapcatLogin() {
+        setNapcatLogin(null);setNapcatError('');setNapcatToken('');setNapcatDraftUrl(snapshot?.config?.qq?.napcatUrl||'http://127.0.0.1:16099');
+        setNapcatNeedsSetup(!snapshot?.config?.qq?.napcatTokenConfigured);napcatRefresh.current=false;setNapcatOpen(true);setNapcatAttempt(value=>value+1);
+      }
+      function closeNapcatLogin(){setNapcatOpen(false);setNapcatToken('');}
+      useEffect(()=>{if(nav.view!=='settings'||tab!=='qq'){setNapcatOpen(false);setNapcatToken('');}},[nav.view,tab]);
+      useEffect(()=>{
+        if(!napcatOpen||nav.view!=='settings'||tab!=='qq')return;
+        let active=true,timer,reconnected=false;
+        const controller=new AbortController(),refresh=napcatRefresh.current;napcatRefresh.current=false;
+        async function poll(forceRefresh=false){
+          setNapcatLoading(true);let complete=false;
+          try{
+            const result=await request(forceRefresh?'/qq/login/refresh':'/qq/login',forceRefresh?{}:undefined,{signal:controller.signal});
+            if(!active)return;
+            setNapcatLogin(result.login);setNapcatError('');setNapcatNeedsSetup(false);if(result.qq)setQQStatus(result.qq);
+            if(result.login?.phase==='ready'){
+              let connected=!!result.qq?.connected;complete=connected||snapshot?.config?.qq?.enabled===false;
+              if(!complete&&!reconnected){
+                reconnected=true;const restored=await request('/qq/reconnect',{}, {signal:controller.signal});
+                if(!active)return;setQQStatus(restored.qq);connected=!!restored.qq?.connected;complete=connected;
+              }
+              if(complete){setNapcatLogin({...result.login,connected});setNotice(connected?'QQ已重新连接，配对和记忆继续沿用':'QQ登录成功');}
+              else if(result.qq?.lastError)setNapcatError(result.qq.lastError);
+            }
+            if(active&&!complete)timer=setTimeout(()=>poll(),2500);
+          }catch(error){
+            if(!active||controller.signal.aborted)return;
+            setNapcatError(errorText(error));if(error.code==='NAPCAT_TOKEN_REQUIRED'||error.status===401)setNapcatNeedsSetup(true);
+          }finally{if(active)setNapcatLoading(false);}
+        }
+        poll(refresh);
+        return()=>{active=false;clearTimeout(timer);controller.abort();};
+      },[napcatOpen,napcatAttempt,nav.view,tab]);
+      async function saveNapcatSetup(){
+        if(napcatSaveGate.current)return;
+        napcatSaveGate.current=true;setNapcatSaving(true);setNapcatError('');
+        try{
+          const result=await request('/qq/login/config',{napcatUrl:napcatDraftUrl,...napcatToken?{napcatToken}:{}});
+          setSnapshot(s=>s?{...s,config:{...s.config,qq:{...s.config.qq,napcatUrl:result.config.napcatUrl,napcatTokenConfigured:result.config.napcatTokenConfigured}}}:s);
+          setDraft(d=>d?{...d,qq:{...d.qq,napcatUrl:result.config.napcatUrl,napcatTokenConfigured:result.config.napcatTokenConfigured}}:d);
+          setNapcatToken('');setNapcatNeedsSetup(false);setNapcatAttempt(value=>value+1);
+        }catch(error){setNapcatError(errorText(error));}
+        finally{napcatSaveGate.current=false;setNapcatSaving(false);}
+      }
+      async function reconnectQQ(){
+        if(qqReconnectGate.current)return;
+        qqReconnectGate.current=true;setQQReconnecting(true);setError('');openNapcatLogin();
+        const generation=lifecycle.current;
+        try{const result=await request('/qq/reconnect',{});if(generation===lifecycle.current){setQQStatus(result.qq);setNotice('已开始重新连接已保存的QQ网关');}}
+        catch(error){if(generation===lifecycle.current)setError(errorText(error));}
+        finally{qqReconnectGate.current=false;setQQReconnecting(false);}
       }
       async function loadQQGroups(signal) {
         setQQGroupsLoading(true);
@@ -942,7 +998,7 @@ window.__ModuleLoader__.load({
         const phase=status?.connected?'ready':status?.phase==='ready'?'connecting':status?.phase||'loading';
         const connectionLabel=({ready:'QQ在线',disabled:'QQ连接已关闭',connecting:'正在连接网关',verifying:'正在核对QQ登录',error:'QQ连接异常',loading:'正在读取QQ状态'})[phase]||'等待QQ连接';
         const recovery=status?.recovery,retrySeconds=Number.isFinite(recovery?.nextRetryAt)?Math.max(0,Math.ceil((recovery.nextRetryAt-Date.now())/1000)):null;
-        const reconnect=async()=>{if(qqReconnecting)return;setQQReconnecting(true);setError('');try{const r=await request('/qq/reconnect',{});setQQStatus(r.qq);setNotice('已开始重新连接已保存的QQ网关');}catch(e){setError(errorText(e));}finally{setQQReconnecting(false);}};
+        const reconnect=reconnectQQ;
         const number=value=>Number.isFinite(value)?value:'—';
         const selectedGroups=Array.isArray(q.groups)?q.groups:[], appliedGroups=snapshot?.config?.qq?.groups;
         const enabledGroups=selectedGroups.filter(g=>g.enabled).length;
@@ -1026,8 +1082,8 @@ window.__ModuleLoader__.load({
               h('div',{className:'dfc-qq-advanced-fields'},
                 h(Field,{label:'本机QQ网关',note:'OneBot正向WebSocket，仅接受本机地址'},h('input',{'aria-label':'本机QQ网关',value:q.wsUrl||'',onChange:e=>setSection('qq',{wsUrl:e.target.value})})),
                 h(Field,{label:'网关令牌',note:q.tokenConfigured?'已由DSH保管，留空继续使用':'保存后由DSH凭据服务保管'},h('input',{'aria-label':'网关令牌',type:'password',value:qqToken,autoComplete:'new-password',placeholder:q.tokenConfigured?'已配置':'填写本机网关令牌',onChange:e=>setQQToken(e.target.value)})))),
-            h('div',{className:'dfc-qq-connect-actions'},h(Button,{icon:'refresh',variant:'primary',disabled:saving,onClick:async()=>{if(await saveConfig())try{await loadQQ();}catch(e){setError(errorText(e));}}},'保存并连接'),phase!=='error'&&h(Button,{variant:'quiet',disabled:!q.enabled||qqReconnecting,onClick:reconnect},qqReconnecting?'正在重连…':'重新连接'),h('a',{href:'http://127.0.0.1:16099/webui',target:'_blank',rel:'noopener noreferrer'},'打开本机QQ登录页面')),
-            h('p',{className:'dfc-qq-footnote'},'首次或登录失效时，在本机QQ网关页面用手机扫码。请保持QQ网关运行。'),h('div',{className:'dfc-qq-account',role:'status'},h('span',null,h('strong',null,'连接状态：'),connectionLabel),(status?.botId||q.botId)&&h('span',null,h('strong',null,'QQ小号：'),status?.botId||q.botId))));
+            h('div',{className:'dfc-qq-connect-actions'},h(Button,{icon:'refresh',variant:'primary',disabled:saving,onClick:async()=>{if(await saveConfig())try{await loadQQ();}catch(e){setError(errorText(e));}}},'保存并连接'),phase!=='error'&&h(Button,{variant:'quiet',disabled:!q.enabled||qqReconnecting,onClick:reconnect},qqReconnecting?'正在重连…':'重新连接'),h(Button,{variant:'quiet',onClick:openNapcatLogin},'扫码登录')),
+            h('p',{className:'dfc-qq-footnote'},'首次或登录失效时，点击扫码登录。手机确认后自动恢复连接。请保持QQ网关运行。'),h('div',{className:'dfc-qq-account',role:'status'},h('span',null,h('strong',null,'连接状态：'),connectionLabel),(status?.botId||q.botId)&&h('span',null,h('strong',null,'QQ小号：'),status?.botId||q.botId))));
           const pairCard=h(Card,{title:'主人配对',note:'从你的主号私聊大肥鱼，完成一次绑定',className:'dfc-block dfc-qq-card'},h('div',{className:'dfc-qq-card-body'},
             h('div',{className:'dfc-qq-pair-summary'},h('div',{className:'dfc-qq-group-mark','aria-hidden':true},h(Icon,{name:'user',size:24})),h('div',null,h('strong',null,status?.ownerId?'主人已绑定':'等待一次私聊配对'),h('p',null,status?.ownerId?'已绑定主人：'+status.ownerId:'配对后，仅已绑定主号可以通过私聊唤起大肥鱼。'))),
             pairing?.code&&h('div',{className:'dfc-qq-pair-code',role:'status'},h('p',null,'请用主号在QQ私聊发送：'),h('strong',null,'配对 '+pairing.code),h('p',null,'有效期十分钟，仅本人使用。'),h(Button,{icon:'copy',variant:'quiet',onClick:async()=>{try{await navigator.clipboard.writeText('配对 '+pairing.code);setNotice('配对句已复制，粘贴到QQ私聊即可');}catch{setError('暂时无法复制，请选中上方配对句复制。');}}},'复制配对句')),
@@ -1039,9 +1095,27 @@ window.__ModuleLoader__.load({
       function settingsNavigation() {
         return h('nav', {className:'dfj-tabs','aria-label':'配置分类'},... [['role','模式与角色'],['voice','语音'],['memory','记忆'],['widget','挂件与音效'],['qq','QQ']].map(([id,label])=>h('button',{key:id,type:'button',className:tab===id?'is-active':'',onClick:()=>setTab(id),'aria-current':tab===id?'page':undefined},label)));
       }
+      function napcatLoginDialog(){
+        if(!napcatOpen||nav.view!=='settings'||tab!=='qq')return null;
+        const phase=napcatLogin?.phase,connected=!!napcatLogin?.connected||phase==='ready'&&!!qqStatus?.connected;
+        const title=connected?'QQ 已连接':phase==='ready'?'QQ 已登录':phase==='scanned'?'已扫码，请在手机确认':phase==='initializing'?'正在准备 QQ 服务':phase==='reconnecting'?'正在连接 QQ 登录服务':'用手机 QQ 扫码';
+        return h('div',{className:'dfc-napcat-backdrop',onMouseDown:event=>{if(event.target===event.currentTarget)closeNapcatLogin();}},
+          h('section',{className:'dfc-napcat-dialog',ref:napcatDialog,role:'dialog','aria-modal':true,'aria-label':'NapCat 扫码登录','aria-describedby':'dfc-napcat-description'},
+            h('header',null,h('div',null,h('span',{className:'dfc-napcat-eyebrow'},'QQ 连接 · NapCat'),h('h2',null,'扫码，让大肥鱼回来')),h(Button,{icon:'x',variant:'quiet','aria-label':'关闭扫码窗口',onClick:closeNapcatLogin})),
+            h('p',{id:'dfc-napcat-description',className:'dfc-napcat-description'},'使用大肥鱼的 QQ 小号扫码，确认后会自动检查连接。'),
+            h('div',{className:'dfc-napcat-code','data-ready':connected},
+              connected?h(Icon,{name:'check',size:68}):napcatLogin?.qrImage?h('img',{src:napcatLogin.qrImage,alt:'QQ登录二维码',width:240,height:240,draggable:false}):h('div',{className:'dfc-napcat-placeholder'},h(Icon,{name:napcatNeedsSetup?'settings':'refresh',size:40}),h('span',null,napcatNeedsSetup?'先连接本机 NapCat':napcatLoading?'正在获取二维码…':'等待二维码'))),
+            h('div',{className:'dfc-napcat-state',role:'status'},h('strong',null,title),h('span',null,connected?'配对与记忆继续沿用':phase==='ready'?'正在恢复大肥鱼的消息通道':phase==='scanned'?'请在手机 QQ 上完成登录确认':'二维码会随登录状态自动更新')),
+            napcatError&&h('p',{className:'dfc-napcat-error',role:'alert'},napcatError),
+            h('details',{className:'dfc-napcat-setup',open:napcatNeedsSetup||undefined},h('summary',null,'NapCat 连接设置'),
+              h(Field,{label:'本机NapCat地址',note:'填写本机管理地址与端口'},h('input',{'aria-label':'本机NapCat地址',value:napcatDraftUrl,onChange:event=>setNapcatDraftUrl(event.target.value)})),
+              h(Field,{label:'NapCat管理密钥',note:snapshot?.config?.qq?.napcatTokenConfigured?'已由DSH保管，留空继续使用':'首次填写后，由DSH凭据服务保管'},h('input',{'aria-label':'NapCat管理密钥',type:'password',autoComplete:'new-password',value:napcatToken,placeholder:snapshot?.config?.qq?.napcatTokenConfigured?'已配置':'填写 NapCat WebUI Token',onChange:event=>setNapcatToken(event.target.value)})),
+              h(Button,{variant:'primary',disabled:napcatSaving||!napcatDraftUrl.trim()||napcatNeedsSetup&&!napcatToken.trim(),onClick:saveNapcatSetup},napcatSaving?'正在连接…':'保存并获取二维码')),
+            h('footer',null,h(Button,{icon:'refresh',variant:'quiet',disabled:napcatLoading||napcatSaving||napcatNeedsSetup||connected||phase==='scanned'||phase==='initializing',onClick:()=>{napcatRefresh.current=true;setNapcatAttempt(value=>value+1);}},'刷新二维码'),h(Button,{variant:'primary',onClick:closeNapcatLogin},connected?'完成':'关闭'))));
+      }
       function settingsPage() {
         const pendingChanges = !!(dirty || apiKey || qqToken);
-        return h('div', {className: 'dfj-settings dfc-settings-shell', 'data-settings-tab': tab},
+        return h('div', {className: 'dfj-settings dfc-settings-shell', 'data-settings-tab': tab,inert:napcatOpen&&tab==='qq'?'':undefined,'aria-hidden':napcatOpen&&tab==='qq'?true:undefined},
           h('div', {className:'dfc-category-rail',inert:tab==='memory'&&memoryPanelOpen?'':undefined,'aria-hidden':tab==='memory'&&memoryPanelOpen?true:undefined}, settingsNavigation()),
           tab === 'memory' ? memoryPage() : h('div',{className:'dfc-settings dfc-settings-content'},
           h('header', {className:'dfc-header'},
@@ -1176,7 +1250,7 @@ window.__ModuleLoader__.load({
             sessionSelect(), h('div', {className:'dfj-history-list'}, messages.length ? messages.map(message=>h('article', {className:'dfj-history-message', key:message.id, 'data-role':message.role}, h('strong', null, message.role === 'user' ? '你' : name), h('p', null, message.text))) : h('p', {className:'dfj-empty'}, '第一句话，从这里开始。'))));
       }
       if (!nav.view) return null;
-      const content = h('div', {className: 'dfj-root'+(placement==='panel'?' dfj-panel-root':''), ref: root, role: placement==='panel'?'region':'dialog', 'aria-modal': placement==='panel'?undefined:true, 'aria-label': nav.view === 'settings' ? '大肥鱼配置中心' : nav.view === 'call' ? '大肥鱼语音通话' : '鲸鱼娘沉浸空间'}, nav.view === 'settings' ? settingsPage() : nav.view === 'call' ? callPage() : immersivePage(), (error || notice) && h('div', {className: 'dfj-banner ' + (error ? 'dfj-banner-error' : ''), role: error ? 'alert' : 'status'}, h('span', null, error || notice), h(Button, {icon: 'x', variant: 'quiet', 'aria-label': '关闭提示', onClick: () => { setError(''); setNotice(''); }})));
+      const content = h('div', {className: 'dfj-root'+(placement==='panel'?' dfj-panel-root':''), ref: root, role: placement==='panel'?'region':'dialog', 'aria-modal': placement==='panel'?undefined:true, 'aria-label': nav.view === 'settings' ? '大肥鱼配置中心' : nav.view === 'call' ? '大肥鱼语音通话' : '鲸鱼娘沉浸空间'}, nav.view === 'settings' ? settingsPage() : nav.view === 'call' ? callPage() : immersivePage(),napcatLoginDialog(), !napcatOpen&&(error || notice) && h('div', {className: 'dfj-banner ' + (error ? 'dfj-banner-error' : ''), role: error ? 'alert' : 'status'}, h('span', null, error || notice), h(Button, {icon: 'x', variant: 'quiet', 'aria-label': '关闭提示', onClick: () => { setError(''); setNotice(''); }})));
       return placement==='panel'?h('div',{className:'dfj-panel-host'},content):content;
     }
     return {
@@ -1188,7 +1262,7 @@ window.__ModuleLoader__.load({
           window.addEventListener('dafeiyu:open', onOpen);
           const onViewRequest = () => window.dispatchEvent(new CustomEvent('dafeiyu:view', {detail:{view:navigation.view}}));
           window.addEventListener('dafeiyu:view-request', onViewRequest); onViewRequest();
-          const stylesheets = ['client.css?v=4', 'immersive.css?v=2', 'emotional.css?v=1', 'memory-graph.css?v=4', 'settings.css?v=2', 'call.css?v=1'].map(file => { const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = ASSET + file; link.dataset.dafeiyu = 'styles'; document.head.appendChild(link); return link; });
+          const stylesheets = ['client.css?v=4', 'immersive.css?v=2', 'emotional.css?v=1', 'memory-graph.css?v=4', 'settings.css?v=3', 'call.css?v=1'].map(file => { const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = ASSET + file; link.dataset.dafeiyu = 'styles'; document.head.appendChild(link); return link; });
           return () => { stopAudio(); open(null); mainLayout = null; window.removeEventListener('dafeiyu:open', onOpen); window.removeEventListener('dafeiyu:view-request', onViewRequest); stylesheets.forEach(link => link.remove()); listeners.clear(); audioStops.clear(); callReplyOwners.clear(); completedCallReplies.clear(); };
         });
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({name: 'shell.overlay', id: 'dsh-dafeiyu-dot'}, App));

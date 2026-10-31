@@ -27,3 +27,13 @@ test('QQ sticker replies can be controlled independently from voice and keep typ
  const next=validatePatch(base,{qq:{stickerReplies:false}});assert.equal(next.qq.stickerReplies,false);assert.equal(next.qq.voiceReplies,true);
  assert.throws(()=>validatePatch(base,{qq:{stickerReplies:'yes'}}),/开关/);
 });
+
+test('NapCat management address is a credential-free loopback origin and the key stays outside JSON',async()=>{
+ const base=defaultConfig();assert.equal(base.qq.napcatUrl,'http://127.0.0.1:16099');
+ for(const napcatUrl of ['https://remote.example','http://127.0.0.1.evil.test','http://user:secret@localhost:16099','http://localhost:16099?token=secret','http://localhost:16099/webui','file:///tmp/napcat','http://localhost:16099/#token'])assert.throws(()=>validatePatch(base,{qq:{napcatUrl}}));
+ assert.equal(validatePatch(base,{qq:{napcatUrl:'http://[::1]:16099/'}}).qq.napcatUrl,'http://[::1]:16099');
+ const root=await mkdtemp(join(tmpdir(),'dafeiyu-napcat-config-')),path=join(root,'config.json'),store=new ConfigStore(path);
+ await store.update({qq:{napcatUrl:'http://localhost:16099'},napcatToken:'synthetic-napcat-secret'});
+ assert.equal(new ConfigStore(path).get().qq.napcatUrl,'http://localhost:16099');
+ assert.doesNotMatch(await readFile(path,'utf8'),/synthetic-napcat-secret|napcatToken/);
+});

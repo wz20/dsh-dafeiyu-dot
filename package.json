@@ -1,6 +1,6 @@
 {
   "name": "dsh-dafeiyu-dot",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "大肥鱼 · 有情绪的声音、记忆宫殿与深海陪伴",
   "private": true,
   "license": "MIT",
@@ -73,5 +73,8 @@
     "@deepseek-ai/dsh-credentials": "*",
     "@deepseek-ai/dsh-llm": "*",
     "@deepseek-ai/schemastery": "^3.18.4"
+  },
+  "dependencies": {
+    "qrcode-generator": "2.0.4"
   }
 }

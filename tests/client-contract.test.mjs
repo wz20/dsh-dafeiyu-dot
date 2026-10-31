@@ -1050,6 +1050,72 @@ test('QQ recovery reconnects saved settings once and leaves unsaved connection f
     assert.equal(page.button('正在重连…').props.disabled,true);assert.equal(attempts,1);finish();await pending;await page.flush();
     assert.equal(page.calls.filter(x=>x.url.endsWith('/config')).length,before);
     assert.equal(page.nodes().find(n=>n.type==='input'&&n.props['aria-label']==='本机QQ网关').props.value,'ws://127.0.0.1:14001');
+    page.button('关闭扫码窗口').props.onClick();await page.flush();
     assert.ok(nodeText(page.render()).includes('已开始重新连接已保存的QQ网关'));
   }finally{page.dispose();}
+});
+
+test('reconnecting QQ immediately opens the embedded NapCat QR dialog and closing aborts its poll',async()=>{
+ const page=await mountOceanRoom(),original=page.env.context.fetch;let loginSignal,loginRequests=0;
+ const response=data=>({ok:true,headers:{get:()=> 'application/json'},json:async()=>({ok:true,...data})});
+ page.env.context.setInterval=()=>0;page.env.context.clearInterval=()=>{};
+ page.env.context.fetch=async(url,options)=>{
+  if(url.endsWith('/qq/login')){loginSignal=options.signal;loginRequests++;if(loginRequests>1)return new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true}));return response({login:{phase:'waiting_qrcode',loggedIn:false,qrImage:'data:image/svg+xml;base64,PHN2Zy8+'},qq:{phase:'error',connected:false}});}
+  if(url.endsWith('/qq/reconnect'))return response({qq:{phase:'connecting',connected:false}});
+  if(url.includes('/state')){const r=await original(url,options),data=await r.json();data.config.qq={enabled:true,sessionId:'session-a',napcatTokenConfigured:true,napcatUrl:'http://127.0.0.1:16099'};return response(data);}
+  return original(url,options);
+ };
+ try{
+  page.env.api.open('settings','session-a','qq');await page.flush();await page.flush();
+  page.button('连接与配对').props.onClick();await page.flush();
+  await page.button('重新连接').props.onClick();await page.flush();
+  assert.ok(page.nodes().find(n=>n.props.role==='dialog'&&n.props['aria-label']==='NapCat 扫码登录'));
+  assert.equal(page.nodes().find(n=>n.type==='img'&&n.props.alt==='QQ登录二维码').props.src,'data:image/svg+xml;base64,PHN2Zy8+');
+  assert.ok(page.button('刷新二维码'));assert.ok(loginSignal);assert.equal(loginSignal.aborted,false);
+  await page.clock.tick(2500);await page.flush();assert.equal(loginRequests,2);
+  page.button('关闭扫码窗口').props.onClick();await page.flush();
+  assert.equal(loginSignal.aborted,true);assert.equal(page.nodes().some(n=>n.props['aria-label']==='NapCat 扫码登录'),false);
+  assert.equal(page.calls.filter(c=>c.url.endsWith('/config')).length,0);
+ }finally{page.dispose();}
+});
+
+test('a successful NapCat scan restores QQ once and keeps the connected confirmation in the dialog',async()=>{
+ const page=await mountOceanRoom(),original=page.env.context.fetch;let ready=false,connected=false,reconnects=0;
+ const response=data=>({ok:true,headers:{get:()=> 'application/json'},json:async()=>({ok:true,...data})});
+ page.env.context.setInterval=()=>0;page.env.context.clearInterval=()=>{};
+ page.env.context.fetch=async(url,options)=>{
+  if(url.endsWith('/qq/login'))return response({login:ready?{phase:'ready',loggedIn:true,coreReady:true}:{phase:'waiting_qrcode',qrImage:'data:image/svg+xml;base64,PHN2Zy8+'},qq:{phase:connected?'ready':'connecting',connected}});
+  if(url.endsWith('/qq/reconnect')){reconnects++;if(ready)connected=true;return response({qq:{phase:connected?'ready':'connecting',connected}});}
+  if(url.includes('/state')){const r=await original(url,options),data=await r.json();data.config.qq={enabled:true,sessionId:'session-a',napcatTokenConfigured:true};return response(data);}
+  return original(url,options);
+ };
+ try{
+  page.env.api.open('settings','session-a','qq');await page.flush();await page.flush();page.button('连接与配对').props.onClick();await page.flush();
+  await page.button('重新连接').props.onClick();await page.flush();assert.equal(reconnects,1);
+  ready=true;await page.clock.tick(2500);await page.flush();assert.equal(reconnects,2);assert.ok(nodeText(page.render()).includes('QQ 已连接'));assert.ok(page.button('完成'));
+  await page.clock.tick(10000);await page.flush();assert.equal(reconnects,2);
+ }finally{page.dispose();}
+});
+
+test('NapCat setup saves its key separately from unsaved QQ drafts and clears the password input',async()=>{
+ const page=await mountOceanRoom(),original=page.env.context.fetch,saves=[];let configured=false;
+ const response=data=>({ok:true,headers:{get:()=> 'application/json'},json:async()=>({ok:true,...data})});
+ page.env.context.setInterval=()=>0;page.env.context.clearInterval=()=>{};
+ page.env.context.fetch=async(url,options)=>{
+  if(url.endsWith('/qq/login'))return configured?response({login:{phase:'waiting_qrcode',qrImage:'data:image/svg+xml;base64,PHN2Zy8+'}}):{ok:false,status:428,headers:{get:()=> 'application/json'},json:async()=>({ok:false,code:'NAPCAT_TOKEN_REQUIRED',error:'请保存 NapCat 管理密钥。'})};
+  if(url.endsWith('/qq/login/config')){saves.push(JSON.parse(options.body));configured=true;return response({config:{napcatUrl:'http://localhost:16099',napcatTokenConfigured:true}});}
+  if(url.includes('/state')){const r=await original(url,options),data=await r.json();data.config.qq={enabled:true,sessionId:'session-a',wsUrl:'ws://127.0.0.1:13001',napcatTokenConfigured:configured};return response(data);}
+  return original(url,options);
+ };
+ try{
+  page.env.api.open('settings','session-a','qq');await page.flush();await page.flush();page.button('连接与配对').props.onClick();await page.flush();
+  page.nodes().find(n=>n.type==='input'&&n.props['aria-label']==='本机QQ网关').props.onChange({target:{value:'ws://127.0.0.1:14001'}});await page.flush();
+  page.button('扫码登录').props.onClick();await page.flush();assert.equal(page.button('保存并获取二维码').props.disabled,true);
+  page.nodes().find(n=>n.props['aria-label']==='本机NapCat地址').props.onChange({target:{value:'http://localhost:16099'}});
+  page.nodes().find(n=>n.props['aria-label']==='NapCat管理密钥').props.onChange({target:{value:'synthetic-webui-secret'}});await page.flush();
+  await page.button('保存并获取二维码').props.onClick();await page.flush();assert.deepEqual(saves,[{napcatUrl:'http://localhost:16099',napcatToken:'synthetic-webui-secret'}]);
+  assert.equal(page.nodes().find(n=>n.props['aria-label']==='NapCat管理密钥').props.value,'');
+  assert.equal(page.nodes().find(n=>n.props['aria-label']==='本机QQ网关').props.value,'ws://127.0.0.1:14001');
+  assert.equal(page.calls.filter(c=>c.url.endsWith('/config')).length,0);
+ }finally{page.dispose();}
 });

@@ -3,6 +3,7 @@
 - `vendor/widget`: dsh-whale-widget 0.4.2 code, MIT. The upstream LICENSE and PROVENANCE remain intact. Bundled default media is generated for this project; see `vendor/widget/ASSET_ADAPTATION.md` for the current asset sources and scope.
 - `assets/persona.md`: adapted from the whale companion DSH preset, MIT. The full license is in `assets/persona-LICENSE`.
 - `assets/icons`: Tabler Icons, MIT. The full license is in `assets/icons/LICENSE`.
+- `qrcode-generator`: Kazuhiko Arase's MIT-licensed QR Code Generator, used locally to render NapCat login codes. Its license accompanies the installed dependency.
 - Default ocean and companion illustrations: generated for this project with image_gen.
 - Default QQ stickers: drawn by `scripts/generate-stickers.mjs` for this project.
 

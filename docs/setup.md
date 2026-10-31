@@ -14,7 +14,7 @@
 
 QQ参考部署使用[NapCatQQ](https://github.com/NapNeko/NapCatQQ)。在网关启用OneBot v11正向WebSocket服务后，由插件主动建立连接；接收数组格式的消息段，发送文字、语音和图片。网关独立运行，登录状态由其管理。
 
-QQ网关默认WebSocket为`ws://127.0.0.1:13001`，本机登录页入口为`http://127.0.0.1:16099/webui`，实际端口应与部署一致。首次及过期登录由用户在网关页面完成扫码。网关、DSH和语音服务需要保持运行。
+QQ网关默认WebSocket为`ws://127.0.0.1:13001`，NapCat管理地址默认为`http://127.0.0.1:16099`，实际端口应与部署一致。在插件QQ页点击「重新连接」或「扫码登录」，即可在弹窗中查看二维码、刷新及确认登录状态。首次在弹窗的「NapCat连接设置」保存管理地址与WebUI Token，密钥由DSH凭据服务保管；Token可从自己的NapCat启动记录或管理配置中获取。手机QQ确认登录后，插件自动检查并恢复原有消息通道，保留原来的账号绑定。其他OneBot网关可继续使用原有连接方式。网关、DSH和语音服务需要保持运行。
 
 本机插件数据目录为`$DSH_HOME/dsh-dafeiyu-dot/`，未设置`DSH_HOME`时使用`~/.dsh/dsh-dafeiyu-dot/`。自定义角色预览可放在`assets/role-preview.png`，自定义表情使用`assets/stickers/catalog.json`及同目录图片。自定义媒体只由当前本机插件读取，静态角色图与触点声音使用已鉴权的资源路由。
 
