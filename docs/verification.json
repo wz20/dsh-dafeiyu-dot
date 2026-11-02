@@ -83,27 +83,38 @@
     "localCustomMediaPreserved": true
   },
   "latestUpdate": {
-    "version": "0.11.0",
-    "checkedAt": "2026-11-02T15:10:48.632469+00:00",
+    "version": "0.11.1",
+    "checkedAt": "2026-11-02T15:21:20.185137+00:00",
     "tests": {
-      "passed": 587,
+      "passed": 598,
       "failed": 0,
       "skipped": 0,
       "syntax": "passed"
     },
-    "breezeBlueApi": {
-      "officialContract": "checked against official documentation",
-      "providerConfiguration": "separate BreezeBlue and OpenAI fields",
-      "credentialStorage": "separate DSH credential references",
-      "voiceCatalog": "bounded pagination and cancellation tested",
-      "health": "model and selected voice requests tested",
-      "synthesis": "sync WAV request and emotion instructions tested with a simulated service",
-      "failureHandling": "safe status messages, cancellation, deadlines and synthesis replay protection tested",
-      "client": "provider switching, saved settings, password clearing and late responses tested",
-      "paidAccountGenerationAndListening": "requires user API key and live acceptance"
+    "staticResources": {
+      "pathBoundary": "node:path relative containment",
+      "windowsPathSemantics": "passed",
+      "posixPathSemantics": "passed",
+      "httpResourceTypes": [
+        "SVG",
+        "PNG",
+        "CSS",
+        "JavaScript",
+        "runtime WAV"
+      ],
+      "rootedPathsTraversalAndSiblingDirectories": "rejected",
+      "windowsDriveAndUncRequests": "rejected",
+      "authenticationAndPersonalOverrides": "preserved"
     },
-    "releasePrivacy": "Breeze key-pattern detection and exact known-value checks",
-    "platformAcceptance": "Windows static asset path compatibility remains a separate known issue",
+    "continuousIntegration": {
+      "workflow": "Resource path checks",
+      "platforms": [
+        "windows-latest",
+        "ubuntu-latest"
+      ],
+      "status": "configured"
+    },
+    "windows11DshInterface": "requires feedback user acceptance",
     "publication": "source and installable package"
   },
   "updateHistory": [
@@ -127,6 +138,30 @@
         "realPhoneScanAndPostLoginRecovery": "user reported normal; native QQ channel subsequently confirmed ready and paired",
         "managementCredentialStorage": "DSH credentials service"
       },
+      "publication": "source and installable package"
+    },
+    {
+      "version": "0.11.0",
+      "checkedAt": "2026-11-02T15:10:48.632469+00:00",
+      "tests": {
+        "passed": 587,
+        "failed": 0,
+        "skipped": 0,
+        "syntax": "passed"
+      },
+      "breezeBlueApi": {
+        "officialContract": "checked against official documentation",
+        "providerConfiguration": "separate BreezeBlue and OpenAI fields",
+        "credentialStorage": "separate DSH credential references",
+        "voiceCatalog": "bounded pagination and cancellation tested",
+        "health": "model and selected voice requests tested",
+        "synthesis": "sync WAV request and emotion instructions tested with a simulated service",
+        "failureHandling": "safe status messages, cancellation, deadlines and synthesis replay protection tested",
+        "client": "provider switching, saved settings, password clearing and late responses tested",
+        "paidAccountGenerationAndListening": "requires user API key and live acceptance"
+      },
+      "releasePrivacy": "Breeze key-pattern detection and exact known-value checks",
+      "platformAcceptance": "Windows static asset path compatibility remains a separate known issue",
       "publication": "source and installable package"
     }
   ]

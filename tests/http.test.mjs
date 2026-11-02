@@ -93,6 +93,15 @@ test('asset route blocks encoded traversal and only serves public project assets
   const good=await host.call(req('/assets/icon.png'));assert.equal(good.status,200);assert.equal(good.headers['Content-Type'],'image/png');assert.equal(good.body.subarray(1,4).toString(),'PNG');
 });
 
+test('bundled icons, styles and scripts remain available through the authenticated asset route',async()=>{
+ const host=fixture();
+ for(const [file,mime] of [['icons/phone.svg','image/svg+xml'],['icon.png','image/png'],['settings.css','text/css'],['memory-graph.js','text/javascript']]){
+  const result=await host.call(req('/assets/'+file));assert.equal(result.status,200,file);assert.ok(result.headers['Content-Type'].startsWith(mime),file);assert.ok(result.body.length>0,file);
+ }
+ for(const name of ['%2e%2e%2flib/config.js','%2fetc%2ficon.png','..%2fassets-copy%2ficon.png'])assert.equal((await host.call(req('/assets/'+name))).status,404,name);
+ const unauthenticated=await host.call(req('/assets/icons/phone.svg','GET',undefined,{'sec-fetch-site':'cross-site'}));assert.equal(unauthenticated.status,403);
+});
+
 test('save stores API credentials in the host and returns the configured Chinese voice without the key',async()=>{
   const host=fixture(),secret='test-private-key';const response=await host.call(req('/config','POST',{apiKey:secret,role:{name:'大肥鱼'}}));
   assert.equal(response.status,200);assert.deepEqual(host.secrets,[{ref:'DAFEIYU_TTS_API_KEY',key:secret}]);assert.equal(response.data().config.tts.localVoice,'');assert.equal(response.data().config.tts.localModel,'audiocpp');assert.doesNotMatch(response.body.toString(),/test-private-key|"apiKey"/);assert.doesNotMatch(JSON.stringify(host.config()),/test-private-key|"apiKey"/);
@@ -250,8 +259,10 @@ test('NapCat missing credentials return a setup code without returning secrets',
 });
 
 test('personal media uses the authenticated asset route with private no-store caching',async t=>{
-  const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
   const root=await mkdtemp(join(tmpdir(),'companion-http-assets-'));t.after(()=>rm(root,{recursive:true,force:true}));await writeFile(join(root,'role-preview.png'),'local-image-bytes');
+  await mkdir(join(root,'audio'));await writeFile(join(root,'audio','head.wav'),'local-wave-bytes');
   const host=fixture(undefined,{},undefined,{localAssetRoot:root}),r=await host.call(req('/assets/role-preview.png'));
   assert.equal(r.status,200);assert.equal(r.body.toString(),'local-image-bytes');assert.equal(r.headers['Cache-Control'],'private, no-store');
+  const sound=await host.call(req('/assets/audio/head.wav'));assert.equal(sound.status,200);assert.equal(sound.body.toString(),'local-wave-bytes');assert.equal(sound.headers['Content-Type'],'audio/wav');assert.equal(sound.headers['Cache-Control'],'private, no-store');
 });

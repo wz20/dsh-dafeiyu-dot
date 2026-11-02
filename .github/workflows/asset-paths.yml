@@ -1,0 +1,42 @@
+name: Resource path checks
+
+on:
+  push:
+    paths:
+      - '.github/workflows/asset-paths.yml'
+      - 'lib/**'
+      - 'tests/asset-path.test.mjs'
+      - 'tests/http.test.mjs'
+      - 'assets/**'
+      - 'package.json'
+  pull_request:
+    paths:
+      - '.github/workflows/asset-paths.yml'
+      - 'lib/**'
+      - 'tests/asset-path.test.mjs'
+      - 'tests/http.test.mjs'
+      - 'assets/**'
+      - 'package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  assets:
+    name: Resource paths (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Check resource loading and path boundaries
+        run: node --test tests/asset-path.test.mjs tests/http.test.mjs
