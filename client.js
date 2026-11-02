@@ -65,6 +65,8 @@ window.__ModuleLoader__.load({
     function stopAudio(id) { audioStops.forEach(fn => fn(id)); }
     function stopWidgetAudio() { window.dispatchEvent(new CustomEvent('dafeiyu:stop-audio', {detail: {source: 'dot'}})); }
     function copy(value) { return JSON.parse(JSON.stringify(value)); }
+    function speechConfigPrefix(tts) { return tts?.source==='local'?'local':tts?.apiProvider==='breezeblue'?'breeze':'api'; }
+    function emotionalSpeechAvailable(tts) { return tts?.source==='local'&&tts.localModel?.trim()==='audiocpp'||tts?.source==='api'&&tts.apiProvider==='breezeblue'; }
     function errorText(error) {
       if (error?.name === 'NotAllowedError') return '麦克风访问已被拒绝，请检查 DeepSeek Harness 的麦克风授权后重试。';
       if (error?.name === 'NotReadableError') return '麦克风或音频设备暂不可用，请检查设备连接和系统声音设置后重试。';
@@ -298,6 +300,7 @@ window.__ModuleLoader__.load({
       const [nav, setNav] = useState(() => placement === 'panel' && navigation.placement !== 'panel' ? {view:'settings',sessionId:'',placement} : navigationFor(placement)), [snapshot, setSnapshot] = useState(null), [draft, setDraft] = useState(null), [tab, setTab] = useState(() => navigation.placement===placement?navigation.settingsTab||'role':'role');
       const [loading, setLoading] = useState(false), [saving, setSaving] = useState(false), [notice, setNotice] = useState(''), [error, setError] = useState('');
       const [voices, setVoices] = useState([]), [speechPreparing, setSpeechPreparing] = useState(false), [apiKey, setApiKey] = useState(''), [health, setHealth] = useState(null);
+      const [breezeApiKey,setBreezeApiKey]=useState('');const voiceCatalogVersion=useRef(0);
       const [qqToken, setQQToken] = useState(''), [qqStatus, setQQStatus] = useState(null);
       const [qqReconnecting,setQQReconnecting]=useState(false);
       const [napcatOpen,setNapcatOpen]=useState(false),[napcatLogin,setNapcatLogin]=useState(null),[napcatError,setNapcatError]=useState(''),[napcatLoading,setNapcatLoading]=useState(false),[napcatAttempt,setNapcatAttempt]=useState(0);
@@ -448,8 +451,9 @@ window.__ModuleLoader__.load({
           const data = await request('/state' + (id ? '?sessionId=' + encodeURIComponent(id) : ''), undefined, {signal: controller.signal});
           if (generation !== lifecycle.current) return;
           setSnapshot(data); setDraft(d => d || copy(data.config)); setReadEnabled(data.config.tts.autoRead !== false);
-          request('/health', undefined, {signal: controller.signal}).then(x => { if (generation === lifecycle.current) setHealth(x); }).catch(() => {});
-          request('/voices', undefined, {signal: controller.signal}).then(x => { if (generation === lifecycle.current) setVoices(x.voices || []); }).catch(() => {});
+          const catalogVersion=++voiceCatalogVersion.current;
+          request('/health', undefined, {signal: controller.signal}).then(x => { if (generation === lifecycle.current&&catalogVersion===voiceCatalogVersion.current) setHealth(x); }).catch(() => {});
+          request('/voices', undefined, {signal: controller.signal}).then(x => { if (generation === lifecycle.current&&catalogVersion===voiceCatalogVersion.current) setVoices(x.voices || []); }).catch(() => {});
         })().catch(e => { if (!controller.signal.aborted && generation === lifecycle.current) setError(errorText(e)); }).finally(() => { if (generation === lifecycle.current) setLoading(false); });
         return () => { controller.abort(); modelAbort.current?.abort(); modelLoadAbort.current?.abort(); memoryAbort.current?.abort(); memoryEditAbort.current?.abort(); memoryReadAbort.current?.abort(); stopAll(); };
       }, [nav.view, nav.sessionId, stopAll]);
@@ -601,14 +605,16 @@ window.__ModuleLoader__.load({
       async function saveConfig() {
         if (!draft || savingGate.current) return null;
         savingGate.current = true; setSaving(true); setError(''); setNotice('');
-        const generation = lifecycle.current, submitted = copy(draft), submittedKey = apiKey, submittedQQToken = qqToken;
+        const generation = lifecycle.current, submitted = copy(draft), submittedKey = apiKey, submittedBreezeKey=breezeApiKey, submittedQQToken = qqToken;
         try {
           const payload = copy(submitted); if (submittedKey) payload.apiKey = submittedKey;
+          if(submittedBreezeKey)payload.breezeApiKey=submittedBreezeKey;
           if (submittedQQToken) payload.qqToken = submittedQQToken;
           const result = await request('/config', payload);
           setSnapshot(s => s ? {...s, config: result.config} : s);
           setDraft(current => JSON.stringify(current) === JSON.stringify(submitted) ? copy(result.config) : current);
           setApiKey(current => current === submittedKey ? '' : current);
+          setBreezeApiKey(current=>current===submittedBreezeKey?'':current);
           setQQToken(current => current === submittedQQToken ? '' : current);
           setReadEnabled(result.config.tts.autoRead !== false); if (result.config.tts.autoRead === false) haltAudio();
           window.dispatchEvent(new CustomEvent('dafeiyu:config', {detail: result.config}));
@@ -807,31 +813,37 @@ window.__ModuleLoader__.load({
               h('p', {className:'dfc-role-session-note'}, '模式在同一会话内切换，保留当前对话。'))));
       }
       function voicePage() {
-        const local = draft.tts.source === 'local', prefix = local ? 'local' : 'api', emotionalAvailable = local && draft.tts.localModel?.trim() === 'audiocpp';
+        const local = draft.tts.source === 'local', breeze=!local&&draft.tts.apiProvider==='breezeblue', prefix=speechConfigPrefix(draft.tts), emotionalAvailable=emotionalSpeechAvailable(draft.tts);
         const voiceBusy = playing || phase === 'synthesizing' || phase === 'starting-playback', emotionalEnabled = draft.tts.emotional !== false;
         const speed = draft.tts.speed ?? 1, volume = draft.tts.volume ?? 0.8, selectedId = draft.tts[prefix + 'Voice'] || '';
         const selectedVoice = voices.find(voice => voice.id === selectedId);
         const selectedName = selectedVoice?.name || (health?.tts?.source === draft.tts.source && health?.tts?.voice === selectedId ? health.tts.voiceName : '') || '当前选择的音色';
         const heading = (icon, text) => h('span', {className:'dfc-voice-heading'}, h(Icon, {name:icon,size:23}), text);
+        const keyConfigured=breeze?draft.tts.breezeKeyConfigured:draft.tts.keyConfigured;
+        const selectSource=patch=>{haltAudio();voiceCatalogVersion.current++;setSection('tts',patch);setHealth(null);setVoices([]);};
+        const loadVoiceCatalog=async()=>{const version=voiceCatalogVersion.current;if(!await saveConfig())return;try{const result=await request('/voices');if(version!==voiceCatalogVersion.current)return;setVoices(result.voices||[]);setNotice('已读取可用音色');}catch(error){if(version===voiceCatalogVersion.current)setError(errorText(error));}};
         const previewStatus = phase === 'synthesizing' ? '正在准备声音 · ' + voiceWaitSeconds + ' 秒' : phase === 'starting-playback' ? '正在启动声音播放 · ' + voiceWaitSeconds + ' 秒' : playing ? '正在试听，随时可以停止' : speechDelivery?.mode === 'preview' && speechDelivery.emotion ? EMOTIONS[speechDelivery.emotion].label + ' · 试听已准备好' : '点选语气后，再点击试听';
         const wave = 'M0 62 C12 62 14 30 24 30 S36 94 48 94 S60 16 72 16 S84 106 96 106 S108 38 120 38 S132 86 144 86 S156 54 168 54 S180 68 192 68 S204 60 216 60 S228 64 240 64 S252 60 264 60 S276 64 288 64 S300 48 312 48 S324 82 336 82 S348 26 360 26 S372 100 384 100 S396 34 408 34 S420 88 432 88 S444 52 456 52 S468 64 480 64 S492 62 504 62 S516 62 528 62';
         return h('div', {className:'dfc-voice-workbench'},
           h('div', {className:'dfc-voice-config'},
             h(Card, {title:heading('volume','声音来源'),note:'选择语音服务与音色，让大肥鱼用喜欢的声音陪伴你。',className:'dfc-block dfc-voice-source'},
               h('div', {className:'dfc-voice-source-tabs',role:'group','aria-label':'语音合成来源'},
-                h(Button, {icon:'volume',className:local?'is-active':'','aria-pressed':local,onClick:()=>{setSection('tts',{source:'local'});setHealth(null);}}, '本地语音'),
-                h(Button, {icon:'network',className:!local?'is-active':'','aria-pressed':!local,onClick:()=>{setSection('tts',{source:'api'});setHealth(null);}}, 'API 语音')),
+                h(Button, {icon:'volume',className:local?'is-active':'','aria-pressed':local,onClick:()=>selectSource({source:'local'})}, '本地语音'),
+                h(Button, {icon:'network',className:!local?'is-active':'','aria-pressed':!local,onClick:()=>selectSource({source:'api'})}, 'API 语音')),
               h('div', {className:'dfc-voice-form'},
+                !local&&h(Field,{label:'API服务商',wide:true,note:'每种服务分别保存地址、模型、音色和密钥'},h('select',{'aria-label':'API服务商',value:draft.tts.apiProvider||'openai',onChange:event=>selectSource({apiProvider:event.target.value})},h('option',{value:'openai'},'OpenAI兼容 API'),h('option',{value:'breezeblue'},'BreezeBlue 官方 API'))),
+                breeze&&h('p',{className:'dfc-voice-control-note',style:{gridColumn:'1 / -1'}},'连接云端 Breeze TTS 2，无需本机部署。单次朗读最多1000字。',h('a',{href:'https://docs.breezeblue.ai/quickstart',target:'_blank',rel:'noopener noreferrer',style:{color:'#77d1ec',marginLeft:6}},'查看官方接入说明')),
                 h(Field, {label:'音色',note:'选择已保存的音色，或填写音色 ID'},
-                  h('input', {list:'dfj-voices',value:selectedId,placeholder:'大肥鱼',onChange:e=>setSection('tts',{[prefix+'Voice']:e.target.value})}),
+                  h('input', {'aria-label':'语音音色ID',list:'dfj-voices',value:selectedId,placeholder:breeze?'填写 voice_id 或读取音色':'音色 ID',onChange:e=>setSection('tts',{[prefix+'Voice']:e.target.value})}),
                   h('datalist', {id:'dfj-voices'}, ...voices.map(voice=>h('option',{key:voice.id,value:voice.id},voice.name)))),
-                h(Field, {label:local?'本地服务地址':'API 服务地址',wide:true,note:local?'连接本机的语音合成服务':'支持兼容 OpenAI 的语音合成接口'},
-                  h('input', {type:'url',value:draft.tts[prefix+'Url']||'',placeholder:local?'http://127.0.0.1:3900/v1':'https://api.example.com/v1',onChange:e=>setSection('tts',{[prefix+'Url']:e.target.value})})),
+                h(Field, {label:local?'本地服务地址':'API 服务地址',wide:true,note:local?'连接本机的语音合成服务':breeze?'BreezeBlue 官方语音服务地址':'支持兼容 OpenAI 的语音合成接口'},
+                  h('input', {'aria-label':'语音服务地址',type:'url',value:draft.tts[prefix+'Url']||(breeze?'https://api.breeze.blue/v1':''),placeholder:local?'http://127.0.0.1:3900/v1':breeze?'https://api.breeze.blue/v1':'https://api.example.com/v1',onChange:e=>setSection('tts',{[prefix+'Url']:e.target.value})})),
                 h('div', {className:'dfc-voice-model-row'},
-                  h(Field, {label:'语音模型'}, h('input',{value:draft.tts[prefix+'Model']||'',placeholder:'模型名称',onChange:e=>setSection('tts',{[prefix+'Model']:e.target.value})})),
-                  h(Button, {icon:'refresh',className:'dfc-voice-check',disabled:saving||voiceBusy,onClick:async()=>{if(!await saveConfig())return;try{setHealth(await request('/health'));setNotice('连接检查已完成');}catch(e){setError(errorText(e));}}}, '保存并检查连接')),
-                !local && h(Field, {label:'API 密钥',wide:true,note:draft.tts.keyConfigured?'密钥已保存。留空继续使用当前密钥。':'仅在服务需要时填写，保存后由宿主保管'},
-                  h('input',{type:'password',value:apiKey,autoComplete:'new-password',placeholder:draft.tts.keyConfigured?'已配置':'填写密钥',onChange:e=>setApiKey(e.target.value)}))),
+                  h(Field, {label:'语音模型'}, h('input',{'aria-label':'语音模型',value:draft.tts[prefix+'Model']||(breeze?'breeze-tts-2':''),placeholder:'模型名称',onChange:e=>setSection('tts',{[prefix+'Model']:e.target.value})})),
+                  h(Button, {icon:'refresh',className:'dfc-voice-check',disabled:saving||voiceBusy,onClick:async()=>{const version=voiceCatalogVersion.current;if(!await saveConfig())return;try{const result=await request('/health');if(version!==voiceCatalogVersion.current)return;setHealth(result);setNotice('连接检查已完成');}catch(e){if(version===voiceCatalogVersion.current)setError(errorText(e));}}}, '保存并检查连接')),
+                !local && h(Field, {label:breeze?'BreezeBlue API密钥':'API 密钥',wide:true,note:keyConfigured?'密钥已保存。留空继续使用当前密钥。':'保存后由DSH凭据服务保管'},
+                  h('input',{'aria-label':breeze?'BreezeBlue API密钥':'OpenAI兼容API密钥',type:'password',value:breeze?breezeApiKey:apiKey,autoComplete:'new-password',placeholder:keyConfigured?'已配置':'填写密钥',onChange:e=>breeze?setBreezeApiKey(e.target.value):setApiKey(e.target.value)})),
+                h(Button,{icon:'refresh',variant:'quiet',disabled:saving||voiceBusy,onClick:loadVoiceCatalog},'保存并读取音色')),
               h('div', {className:'dfc-voice-connection'},
                 h('div', {className:'dfc-voice-health'+(health?.tts?.available?' is-available':health?.tts?' needs-attention':''),role:'status'},
                   h('span',{className:'dfc-voice-status-dot','aria-hidden':true}),
@@ -841,7 +853,7 @@ window.__ModuleLoader__.load({
               h('div', {className:'dfc-voice-toggle-row'},
                 h('span',{className:'dfc-voice-label'},'情绪语音'),
                 h(Toggle,{value:emotionalEnabled,disabled:!emotionalAvailable||voiceBusy,label:'情绪语音',onChange:value=>setSection('tts',{emotional:value})}),
-                h('p',null,emotionalAvailable?'根据这句话的心情，生成自然的语气':'当前服务提供基础语音；情绪表达已适配本地 Breeze')),
+                h('p',null,emotionalAvailable?'根据这句话的心情，生成自然的语气':'当前服务提供基础语音；情绪表达支持本地 Breeze 和 BreezeBlue 官方 API')),
               h('div', {className:'dfc-voice-style-row'}, h('span',{className:'dfc-voice-label'},'情绪风格'),
                 h('div',{className:'dfc-voice-style',role:'group','aria-label':'情绪表达方式'}, ...[['gentle','轻柔'],['natural','自然'],['vivid','鲜明']].map(([value,label])=>h(Button,{key:value,className:(draft.tts.expressiveness||'natural')===value?'is-active':'','aria-pressed':(draft.tts.expressiveness||'natural')===value,disabled:!emotionalAvailable||!emotionalEnabled||voiceBusy,onClick:()=>setSection('tts',{expressiveness:value})},label)))),
               h('div', {className:'dfc-voice-slider'}, h('span',{className:'dfc-voice-label'},'说话语速'),
@@ -895,7 +907,7 @@ window.__ModuleLoader__.load({
             memory.filePath && h('dl', {className:'dfj-memory-file'}, h('dt', null, '记忆文件'), h('dd', null, memory.filePath))));
       }
       function memoryPage() {
-        const settingsAction = draft && (dirty || apiKey || qqToken) && h(Button,{icon:'check',variant:'primary',disabled:saving,onClick:saveConfig},saving?'正在保存…':'保存设置');
+        const settingsAction = draft && (dirty || apiKey || breezeApiKey || qqToken) && h(Button,{icon:'check',variant:'primary',disabled:saving,onClick:saveConfig},saving?'正在保存…':'保存设置');
         if (!MemoryExplorer || !draft) return h('div', {className:'dfg-initializing'},
           h('header',{className:'dfg-header'},h(Button,{icon:'arrow-left',variant:'quiet',className:'dfg-back',onClick:close},'返回工作区'),h('div',{className:'dfg-brand'},h('h1',null,'记忆宫殿'))),
           graphLoadError ? h('div', {className:'dfg-load-error',role:'alert'}, graphLoadError, h(Button, {onClick:()=>{setGraphLoadError('');setGraphAttempt(value=>value+1);}}, '重新加载关系图')) : h('p', {className:'dfj-loading',role:'status'}, '正在展开记忆星图…'),
@@ -1114,7 +1126,7 @@ window.__ModuleLoader__.load({
             h('footer',null,h(Button,{icon:'refresh',variant:'quiet',disabled:napcatLoading||napcatSaving||napcatNeedsSetup||connected||phase==='scanned'||phase==='initializing',onClick:()=>{napcatRefresh.current=true;setNapcatAttempt(value=>value+1);}},'刷新二维码'),h(Button,{variant:'primary',onClick:closeNapcatLogin},connected?'完成':'关闭'))));
       }
       function settingsPage() {
-        const pendingChanges = !!(dirty || apiKey || qqToken);
+        const pendingChanges = !!(dirty || apiKey || breezeApiKey || qqToken);
         return h('div', {className: 'dfj-settings dfc-settings-shell', 'data-settings-tab': tab,inert:napcatOpen&&tab==='qq'?'':undefined,'aria-hidden':napcatOpen&&tab==='qq'?true:undefined},
           h('div', {className:'dfc-category-rail',inert:tab==='memory'&&memoryPanelOpen?'':undefined,'aria-hidden':tab==='memory'&&memoryPanelOpen?true:undefined}, settingsNavigation()),
           tab === 'memory' ? memoryPage() : h('div',{className:'dfc-settings dfc-settings-content'},
@@ -1162,7 +1174,7 @@ window.__ModuleLoader__.load({
         const name = snapshot?.config.role.name || '大肥鱼', audioBusy = playing || phase === 'synthesizing' || phase === 'starting-playback';
         const delivery = speechDelivery?.sessionId === nav.sessionId && speechDelivery.replyId === lastReply?.id ? speechDelivery : null;
         const tone = delivery?.emotion && EMOTIONS[delivery.emotion]?.label;
-        const voiceId = snapshot?.config.tts.source === 'api' ? snapshot?.config.tts.apiVoice : snapshot?.config.tts.localVoice;
+        const voiceId = snapshot?.config.tts?.[speechConfigPrefix(snapshot?.config.tts)+'Voice'];
         const voiceName = voices.find(voice=>voice.id === voiceId)?.name || voiceId || '当前音色';
         const state = playing ? 'speaking' : audioBusy || call && !callReady.current ? 'preparing' : running || sending || phase === 'transcribing' ? 'thinking' : call ? micMuted ? 'muted' : 'listening' : 'idle';
         const canStart = !loading && messagesReady && !!nav.sessionId && currentPreset === 'whale' && !running && !sending && !modelBusy;
@@ -1197,7 +1209,7 @@ window.__ModuleLoader__.load({
       }
       function immersivePage() {
         const name = snapshot?.config.role.name || '大肥鱼', audioBusy = playing || phase === 'synthesizing' || phase === 'starting-playback';
-        const emotionalVoice = snapshot?.config.tts.emotional !== false && snapshot?.config.tts.source === 'local' && snapshot?.config.tts.localModel?.trim() === 'audiocpp';
+        const emotionalVoice = snapshot?.config.tts.emotional !== false && emotionalSpeechAvailable(snapshot?.config.tts);
         const delivery = speechDelivery?.sessionId === nav.sessionId && speechDelivery.replyId === lastReply?.id && speechDelivery.text === lastReply?.text && !running && !sending ? speechDelivery : null;
         const emotion = delivery?.emotion, tone = emotion ? EMOTIONS[emotion] : null;
         const voiceState = playing ? 'speaking' : phase === 'starting-playback' ? 'starting-playback' : phase === 'synthesizing' ? 'preparing' : running || sending ? 'thinking' : call && !micMuted ? 'listening' : 'idle';

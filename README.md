@@ -28,7 +28,7 @@
 | 能力 | 使用方式 |
 | --- | --- |
 | 角色与模式 | 可视化编辑名字、称呼和角色提示词；在同一会话切换标准模式与鲸鱼娘模式。 |
-| 情绪语音 | 本地兼容链路将台词与情绪指令一起合成；也支持 API 普通 TTS，可选择音色、音量和语速。 |
+| 情绪语音 | 本地 VoiceStudio/audio.cpp 与 BreezeBlue 官方 API 均支持同一音色的情绪表达；提供 OpenAI 兼容 TTS，可选择音色、音量和语速。 |
 | 记忆宫殿 | 保存有来源的长期事实，回复前自动召回、压缩前补存；支持查看关系、精读、更正、遗忘和备份。 |
 | QQ 陪伴 | 配对主号私聊；显式启用的群中真实 @ 触发回复，支持语音条、主题表情与消息摘要看板。 |
 | 语音通话 | 手动开始的半双工通话，复用当前会话、模型与记忆；可以静音、打断、挂断，也能展开文字输入。 |
@@ -44,6 +44,7 @@
 | --- | --- | --- |
 | 宿主与模型调用 | DeepSeek Harness、Cordis、Node.js ES Modules | 注册插件、接入会话与配置页面；对话模型在 DSH 中选择。 |
 | 本地语音服务 | [VoiceStudio](https://github.com/debpalash/VoiceStudio)，引擎 ID 为 `audiocpp` | 管理音色并提供兼容的 `POST /v1/audio/speech` 接口，接收台词与 `instructions` 情绪指令。 |
+| 云端语音服务 | [BreezeBlue API](https://docs.breezeblue.ai/quickstart) | 读取账号音色，以原生 `text-to-speech` 接口发送台词、音色与情绪指令，返回 WAV。 |
 | 本地语音推理 | [audio.cpp](https://github.com/0xShug0/audio.cpp)，GGUF / ggml | 在本机执行语音模型推理。 |
 | 情绪语音模型 | [Breeze TTS 2](https://github.com/breezeblue-ai/breeze-tts) | 结合选定的参考音色与语气指令合成声音；最终效果需要试听。 |
 | QQ 网关 | [NapCatQQ](https://github.com/NapNeko/NapCatQQ) | 通过 **OneBot v11 正向 WebSocket** 收发消息；插件主动连接网关。 |
@@ -51,7 +52,9 @@
 | 记忆存储与检索 | Markdown 事实文件、JSON 状态与索引、自实现本地检索 | 关键词、别名及实体/属性/时间约束召回；后台整理复用会话模型。 |
 | 语速处理 | FFmpeg | 对合成结果进行可选的保音高调速。 |
 
-**语音链路：** 插件 → HTTP → VoiceStudio（`audiocpp`）→ audio.cpp → Breeze TTS 2 → WAV → FFmpeg 按需调速 → 播放或发送。
+**本地语音链路：** 插件 → HTTP → VoiceStudio（`audiocpp`）→ audio.cpp → Breeze TTS 2 → WAV → FFmpeg 按需调速 → 播放或发送。
+
+**云端语音链路：** 插件 → HTTPS → BreezeBlue 官方 API → WAV → 播放或发送。
 
 **QQ 链路：** QQ ↔ NapCatQQ ↔ OneBot v11 正向 WebSocket ↔ 插件 ↔ DSH 会话。
 
@@ -62,7 +65,7 @@
 | 组件 | 用途 |
 | --- | --- |
 | DeepSeek Harness 桌面版及已配置的对话模型 | 插件宿主、聊天和记忆整理；其他版本需自行核对接口兼容性。 |
-| VoiceStudio＋audio.cpp＋Breeze TTS 2，或兼容 TTS API | 合成语音。当前情绪指令接入本地 `audiocpp` 链路。 |
+| BreezeBlue 官方 API，或 VoiceStudio＋audio.cpp＋Breeze TTS 2，或 OpenAI 兼容 TTS API | 选择云端或本地语音。本地 `audiocpp` 与 BreezeBlue 官方 API 支持情绪指令。 |
 | DSH 语音识别器 | 使用通话时需要，识别配置沿用 DSH。 |
 | NapCatQQ 或兼容 OneBot v11 正向 WebSocket 网关 | 使用 QQ 时需要，登录与运行由网关管理。 |
 | FFmpeg | 使用非 1 倍语速的保音高调速时需要。 |
@@ -103,12 +106,16 @@ dsh plugin --profile desktop add "link:$PWD" --ignore-scripts
 ### 3. 配置自己的大肥鱼
 
 1. **角色**：填写名字、称呼和提示词，选择陪伴会话，开启鲸鱼娘模式。
-2. **语音**：选择本地或 API，填写兼容服务地址、模型与音色；检查连接后手动试听。首次安装的本地音色留空，朗读和挂件声音由你手动开启。
+2. **语音**：选择本地，或在 API 中选择「BreezeBlue 官方 API」／「OpenAI兼容 API」。填写对应密钥，读取并选择音色，检查连接后手动试听。各服务分别保存配置和密钥，首次安装的音色由你选择。
 3. **记忆**：开启陪伴记忆，查看宫殿中的事实与来源；需要保存到工作区时配置 `memoryPalaceRoot`。
 4. **QQ（可选）**：运行 NapCatQQ 等网关，启用 OneBot v11 正向 WebSocket，保存地址与令牌，选择陪伴会话，再完成主号配对。群回复需逐群启用。
 5. **通话与挂件（可选）**：从会话顶栏或配置中心进入语音通话；按需开启挂件与触点音效。
 
 服务地址、素材覆盖方式和详细步骤见 [安装与配置](docs/setup.md)。
+
+### 使用 BreezeBlue 官方 API
+
+在「大肥鱼 → 语音」选择 **API → BreezeBlue 官方 API**，默认地址为 `https://api.breeze.blue/v1`，模型为 `breeze-tts-2`。填写你自己的 API Key，点击「保存并读取音色」，选择音色或填写 `voice_id`，再检查连接、试听语气。云端路线需要可用的 BreezeBlue 账号和额度，语音模型由服务端运行。详细步骤与错误排查见 [配置说明](docs/setup.md#breezeblue-官方-api)。
 
 ## 界面预览
 
@@ -155,11 +162,13 @@ DSH 提供会话及已配置的对话模型、语音识别调用接口，实际�
 
 ### 同一音色如何表达情绪
 
-开启情绪并使用本地 `audiocpp` 支持链路时，原始回复分别进入台词清洗与语气判断：动作线索可以帮助判断情绪，实际朗读只使用清洗后的台词。本地支持链路将台词、情绪指令和选定音色一起合成。
+开启情绪并选择本地 `audiocpp` 或 BreezeBlue 官方 API 时，原始回复分别进入台词清洗与语气判断：动作线索可以帮助判断情绪，实际朗读只使用清洗后的台词。两条支持链路均将台词、情绪指令和选定音色一起合成。
 
-![手绘情绪语音流程图：原始回复并行生成朗读台词和情绪指令，本地与 API 分路合成，再校验、调速和输出](docs/images/emotional-voice-flow.png)
+下图展示本地与 OpenAI 兼容服务的参考链路。BreezeBlue 官方 API 复用同一语气判断流程，通过官方原生接口合成。
 
-当前语气判断复用 DSH 选定的对话模型，使用独立且不开放工具的调用。台词作为 `input`、选定音色作为 `voice`、情绪指令作为 `instructions`，经 VoiceStudio 的 `audiocpp` 引擎传给 audio.cpp 与 Breeze TTS 2。API 路线和关闭情绪时使用清洗后的普通台词，不额外调用语气判断。合成结果经过 WAV 校验，按需由 FFmpeg 保音高调速，再由 DSH 播放或经 NapCatQQ 发送 QQ 语音。最终表现取决于服务、音色与模型能力，需要实际试听确认。
+![手绘情绪语音流程图：原始回复并行生成朗读台词和情绪指令，本地与 OpenAI 兼容 API 分路合成，再校验、调速和输出](docs/images/emotional-voice-flow.png)
+
+当前语气判断复用 DSH 选定的对话模型，使用独立且不开放工具的调用。台词作为 `input`、选定音色作为 `voice`、情绪指令作为 `instructions`，经 VoiceStudio 的 `audiocpp` 引擎传给 audio.cpp 与 Breeze TTS 2。BreezeBlue 官方 API 使用 `text`、`model_id`、`voice_id` 与 `instructions`，情绪强度传入 `voice_settings.guidance_scale`。OpenAI 兼容路线和关闭情绪时使用清洗后的普通台词，不额外调用语气判断。合成结果经过 WAV 校验，按需由 FFmpeg 保音高调速，再由 DSH 播放或经 NapCatQQ 发送 QQ 语音。最终表现取决于服务、音色与模型能力，需要实际试听确认。
 
 ## 本地数据与隐私
 

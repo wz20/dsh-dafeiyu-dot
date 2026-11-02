@@ -1119,3 +1119,83 @@ test('NapCat setup saves its key separately from unsaved QQ drafts and clears th
   assert.equal(page.calls.filter(c=>c.url.endsWith('/config')).length,0);
  }finally{page.dispose();}
 });
+
+async function mountVoiceProviderSettings() {
+ const runner=hookRunner(),clock=controlledClock(),calls=[];let delayedCatalog=false,finishCatalog;
+ let saved={role:{name:'大肥鱼',address:'主人',prompt:'角色设定'},tts:{source:'local',localModel:'audiocpp',localUrl:'http://127.0.0.1:3900/v1',localVoice:'local-fish',apiProvider:'openai',apiUrl:'https://tts.example.test/v1',apiModel:'tts-1',apiVoice:'alloy',keyConfigured:true,breezeUrl:'https://api.breeze.blue/v1',breezeModel:'breeze-tts-2',breezeVoice:'voc_saved',breezeKeyConfigured:false,autoRead:false,emotional:true,volume:.8},memory:{enabled:true},widget:{enabled:true,regions:{}}};
+ const response=data=>({ok:true,headers:{get:()=> 'application/json'},json:async()=>({ok:true,...data})});
+ const env=environment(async(url,options)=>{
+  calls.push({url,body:options.body?JSON.parse(options.body):null});
+  if(url.endsWith('/config')){
+   const {apiKey,breezeApiKey,...config}=JSON.parse(options.body);saved=config;
+   saved.tts.keyConfigured=!!apiKey||saved.tts.keyConfigured;saved.tts.breezeKeyConfigured=!!breezeApiKey||saved.tts.breezeKeyConfigured;
+   return response({config:saved});
+  }
+  if(url.endsWith('/voices')){const data={voices:saved?.tts.apiProvider==='breezeblue'?[{id:'voc_test',name:'云端大肥鱼'}]:[{id:'alloy',name:'Alloy'}]};if(delayedCatalog){delayedCatalog=false;return new Promise(resolve=>{finishCatalog=()=>resolve(response(data));});}return response(data);}
+  if(url.endsWith('/health'))return response({tts:{source:'api',available:true,message:'服务已连接'},asr:{available:true}});
+  if(url.includes('/state'))return response({config:saved,session:{id:'session-a',preset:'whale'},sessions:[{id:'session-a',title:'陪伴',preset:'whale'}]});
+  if(url.includes('/messages'))return response({messages:[],running:false});
+  return response({});
+ },runner.hooks);
+ env.context.setTimeout=clock.setTimeout;env.context.clearTimeout=clock.clearTimeout;env.window.localStorage=draftStorage();
+ let App;const effects=[];env.plugin.apply({effect(fn){effects.push(fn());},slots:{inject(_name,fn){fn();},register(options,component){if(options.name==='shell.overlay')App=component;return ()=>{};}}});
+ const render=()=>runner.render(App,{}),nodes=()=>renderedNodes(render()),button=label=>nodes().find(node=>node.type==='button'&&(node.props['aria-label']===label||nodeText(node)===label));
+ async function flush(){render();await settle();render();await settle();return render();}
+ render();env.api.open('settings','session-a','voice');await flush();await flush();
+ return {env,providerCalls:calls,saved:()=>saved,render,nodes,button,flush,holdNextCatalog(){delayedCatalog=true;},finishCatalog(){assert.ok(finishCatalog);finishCatalog();},dispose(){runner.dispose();effects.forEach(fn=>fn());}};
+}
+
+test('BreezeBlue API selection preserves independent local and OpenAI fields and enables emotional delivery',async()=>{
+ const page=await mountVoiceProviderSettings();
+ try{
+  page.button('API 语音').props.onClick();await page.flush();
+  const provider=()=>page.nodes().find(n=>n.type==='select'&&n.props['aria-label']==='API服务商');
+  assert.ok(provider());assert.equal(provider().props.value,'openai');
+  provider().props.onChange({target:{value:'breezeblue'}});await page.flush();
+  assert.equal(page.nodes().find(n=>n.props['aria-label']==='语音服务地址').props.value,'https://api.breeze.blue/v1');
+  assert.equal(page.nodes().find(n=>n.props['aria-label']==='语音模型').props.value,'breeze-tts-2');
+  assert.equal(page.nodes().find(n=>n.props['aria-label']==='语音音色ID').props.value,'voc_saved');
+  assert.equal(page.button('试听这份心情').props.disabled,false);
+  assert.equal(page.button('轻快开心').props.disabled,false);
+  assert.ok(page.nodes().some(n=>n.type==='a'&&n.props.href==='https://docs.breezeblue.ai/quickstart'));
+  provider().props.onChange({target:{value:'openai'}});await page.flush();
+  assert.equal(page.nodes().find(n=>n.props['aria-label']==='语音服务地址').props.value,'https://tts.example.test/v1');
+  assert.equal(page.nodes().find(n=>n.props['aria-label']==='语音音色ID').props.value,'alloy');
+  assert.equal(page.button('试听这份心情').props.disabled,true);
+  page.button('本地语音').props.onClick();await page.flush();
+  assert.equal(page.nodes().find(n=>n.props['aria-label']==='语音音色ID').props.value,'local-fish');
+ }finally{page.dispose();}
+});
+
+test('BreezeBlue key saves separately, clears after save, and the saved provider drives voice loading',async()=>{
+ const page=await mountVoiceProviderSettings();
+ try{
+  page.button('API 语音').props.onClick();await page.flush();
+  page.nodes().find(n=>n.props['aria-label']==='API服务商').props.onChange({target:{value:'breezeblue'}});await page.flush();
+  const key=()=>page.nodes().find(n=>n.props['aria-label']==='BreezeBlue API密钥');
+  assert.equal(key().props.type,'password');key().props.onChange({target:{value:'synthetic-breeze-key'}});await page.flush();
+  await page.button('保存并读取音色').props.onClick();await page.flush();
+  const save=page.providerCalls.find(c=>c.url.endsWith('/config'));
+  assert.equal(save.body.breezeApiKey,'synthetic-breeze-key');assert.equal(save.body.apiKey,undefined);
+  assert.equal(save.body.tts.apiProvider,'breezeblue');assert.equal(save.body.tts.apiUrl,'https://tts.example.test/v1');assert.equal(save.body.tts.localVoice,'local-fish');
+  assert.equal(key().props.value,'');assert.equal(key().props.placeholder,'已配置');
+  assert.ok(page.nodes().some(n=>n.type==='option'&&nodeText(n)==='云端大肥鱼'));
+  const saveIndex=page.providerCalls.findIndex(c=>c.url.endsWith('/config'));assert.ok(page.providerCalls.findIndex((c,index)=>index>saveIndex&&c.url.endsWith('/voices'))>saveIndex);
+  assert.equal(page.saved().breezeApiKey,undefined);assert.equal(page.saved().apiKey,undefined);
+  page.env.api.open('call','session-a');await page.flush();assert.ok(nodeText(page.render()).includes('voc_saved'));
+  page.env.api.open('immersive','session-a');await page.flush();assert.ok(nodeText(page.render()).includes('心情，会藏在声音里'));
+ }finally{page.dispose();}
+});
+
+test('a late BreezeBlue voice catalog cannot overwrite a newly selected API provider',async()=>{
+ const page=await mountVoiceProviderSettings();
+ try{
+  page.button('API 语音').props.onClick();await page.flush();
+  const provider=()=>page.nodes().find(n=>n.props['aria-label']==='API服务商');
+  provider().props.onChange({target:{value:'breezeblue'}});await page.flush();
+  page.holdNextCatalog();const loading=page.button('保存并读取音色').props.onClick();await page.flush();
+  provider().props.onChange({target:{value:'openai'}});await page.flush();page.finishCatalog();await loading;await page.flush();
+  assert.equal(provider().props.value,'openai');assert.equal(page.nodes().some(n=>n.type==='option'&&nodeText(n)==='云端大肥鱼'),false);
+  assert.equal(page.nodes().find(n=>n.props['aria-label']==='语音音色ID').props.value,'alloy');
+ }finally{page.dispose();}
+});

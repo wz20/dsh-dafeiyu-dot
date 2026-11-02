@@ -6,7 +6,7 @@ TEXT_SUFFIXES={'.js','.mjs','.cjs','.json','.md','.txt','.yml','.yaml','.toml','
 GENERIC_VOICES={'default','alloy','echo','fable','onyx','nova','shimmer','fixture-voice','test-voice','voice-a','voice-b'}
 IDENTITY_KEYS={'botId','ownerId','groupId','senderId','sessionId','userId','accountId','uin'}
 VOICE_KEYS={'localVoice','voiceId','profileId','speakerId'}
-CREDENTIAL=re.compile(rb'(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[A-Z0-9]{16})')
+CREDENTIAL=re.compile(rb'(?:sk-[A-Za-z0-9_-]{20,}|brz_[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[A-Z0-9]{16})')
 RUNTIME_NAME=re.compile(r'(^|/)(?:gateway-credentials\.json|qq-group-sessions\.json|qq-monitor\.json|memories\.json|state\.json|config\.json|session\.v\d+\.jsonl(?:\.zstd)?|\.env(?:\.[^/]*)?)$')
 FOLDERS={'node_modules','.git','__pycache__'}
 

@@ -98,6 +98,17 @@ test('save stores API credentials in the host and returns the configured Chinese
   assert.equal(response.status,200);assert.deepEqual(host.secrets,[{ref:'DAFEIYU_TTS_API_KEY',key:secret}]);assert.equal(response.data().config.tts.localVoice,'');assert.equal(response.data().config.tts.localModel,'audiocpp');assert.doesNotMatch(response.body.toString(),/test-private-key|"apiKey"/);assert.doesNotMatch(JSON.stringify(host.config()),/test-private-key|"apiKey"/);
 });
 
+test('Breeze API key is independently stored and configuration responses never return it',async()=>{
+ const host=fixture(),key='synthetic-breeze-api-key';
+ const result=await host.call(req('/config','POST',{tts:{source:'api',apiProvider:'breezeblue',breezeVoice:'voc_demo_voice'},breezeApiKey:key}));
+ assert.equal(result.status,200);assert.deepEqual(host.secrets,[{ref:'DAFEIYU_BREEZE_API_KEY',key}]);
+ assert.equal(result.data().config.tts.breezeKeyConfigured,true);assert.equal(result.data().config.tts.apiProvider,'breezeblue');
+ assert.doesNotMatch(result.body.toString(),/synthetic-breeze-api-key|breezeApiKey/);assert.doesNotMatch(JSON.stringify(host.config()),/synthetic-breeze-api-key|breezeApiKey/);
+ const invalid=await host.call(req('/config','POST',{tts:{apiProvider:'unknown'},breezeApiKey:'other-key'}));assert.equal(invalid.status,400);assert.equal(host.secrets.length,1);
+ const blocked=await host.call(req('/config','POST',{breezeApiKey:'other-key'},{'sec-fetch-site':'cross-site'}));assert.equal(blocked.status,403);assert.equal(host.secrets.length,1);
+ const malformed=await host.call(req('/config','POST',{breezeApiKey:123}));assert.equal(malformed.status,400);assert.equal(host.secrets.length,1);
+});
+
 test('stop route is restricted to the same whale-mode boundary as send and transcribe',async()=>{
   const host=fixture();let response=await host.call(req('/stop','POST',{sessionId:'one'}));assert.equal(response.status,409);assert.equal(host.cancelled,0);
   host.agent.session.header.agentPreset='whale';response=await host.call(req('/stop','POST',{sessionId:'one'}));assert.equal(response.status,200);assert.equal(host.cancelled,1);
@@ -107,6 +118,14 @@ test('closing an HTTP synthesis response aborts the pending provider request',as
   const host=fixture(),response=new Response();let started,signal;const pendingReady=new Promise(resolve=>{started=resolve;});
   host.speech.synthesize=async(_text,options)=>{signal=options.signal;started();await new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));};
   const pending=host.call(req('/synthesize','POST',{preview:true,text:'主人你好'}),response);await pendingReady;response.destroyed=true;response.emit('close');await pending;assert.equal(signal.aborted,true);assert.equal(response.writableEnded,false);
+});
+
+test('closing a voice catalog or health check cancels the provider work',async()=>{
+ for(const [path,method] of [['/voices','voices'],['/health','health']]){
+  const host=fixture(),response=new Response();let ready,signal;const started=new Promise(resolve=>ready=resolve);
+  host.speech[method]=async options=>{signal=options.signal;ready();await new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));};
+  const pending=host.call(req(path),response);await started;assert.equal(signal.aborted,false);response.destroyed=true;response.emit('close');await pending;assert.equal(signal.aborted,true);assert.equal(response.writableEnded,false);
+ }
 });
 
 test('speech response exposes bounded delivery metadata and rechecks mode before returning audio',async()=>{
